@@ -1094,31 +1094,34 @@ function updateOrientationLayout() {
   document.body.classList.toggle("is-landscape", isLandscape);
 }
 
-/********************************************
- *   INIT GLOBALE
- ********************************************/
+// === INIT GLOBALE ===      
 
-document.addEventListener("DOMContentLoaded", () => {
-  loadState();
-  loadArchives();
-  initHeaderDate();
-  initNav();
-  initLinesSidebar();
-  bindProductionForm();
-  initArretsForm();
-  bindOrganisationForm();
-  bindPersonnelForm();
-  bindExportGlobal();
-  initCalculator();
-  bindDDM();
-  bindRAZEquipe();
-  initHistoriqueEquipes();
-  initTheme();
+function updateOrientationLayout() {  
+  const isLandscape = window.innerWidth > window.innerHeight;  
+  document.body.classList.toggle("is-landscape", isLandscape);  
+}  
 
-  showSection(state.currentSection || "atelier");
+document.addEventListener("DOMContentLoaded", () => {      
+  loadState();      
+  loadArchives();      
+  initHeaderDate();      
+  initNav();      
+  initLinesSidebar();      
+  bindProductionForm();      
+  initArretsForm();      
+  bindOrganisationForm();      
+  bindPersonnelForm();      
+  bindExportGlobal();      
+  initCalculator();      
+  bindDDM();      
+  bindRAZEquipe();      
+  initHistoriqueEquipes();      
+  initTheme();      
+
+  // Gestion du layout en fonction de l'orientation réelle du téléphone  
+  updateOrientationLayout();  
+  window.addEventListener("resize", updateOrientationLayout);  
+  window.addEventListener("orientationchange", updateOrientationLayout);  
+
+  showSection(state.currentSection || "atelier");      
 });
-
-// Orientation réelle (PWA)
-updateOrientationLayout();
-window.addEventListener("resize", updateOrientationLayout);
-window.addEventListener("orientationchange", updateOrientationLayout);
