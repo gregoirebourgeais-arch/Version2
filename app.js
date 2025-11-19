@@ -1063,65 +1063,59 @@ function bindRAZEquipe() {
 
     alert(`RAZ OK. Nouvelle équipe active : ${next}`);
   });
-}
 
-/********************************************
- *   PARTIE – THÈME CLAIR / SOMBRE
- ********************************************/
+// === THÈME CLAIR / SOMBRE ===  
 
 function initTheme() {
   const btn = document.getElementById("themeToggleBtn");
+  if (!btn) return;
 
+  // Charger le thème sauvegardé
   const saved = localStorage.getItem("themeMode");
-  if (saved === "light") document.body.classList.add("light-mode");
+  if (saved === "light") {
+    document.body.classList.add("light-mode");
+  }
 
+  // Toggle du thème
   btn.addEventListener("click", () => {
     document.body.classList.toggle("light-mode");
 
-    if (document.body.classList.contains("light-mode"))
+    if (document.body.classList.contains("light-mode")) {
       localStorage.setItem("themeMode", "light");
-    else
+    } else {
       localStorage.setItem("themeMode", "dark");
+    }
   });
 }
 
-/********************************************
- *   ORIENTATION MODE
- ********************************************/
+// === INIT GLOBALE / ORIENTATION ===
 
 function updateOrientationLayout() {
   const isLandscape = window.innerWidth > window.innerHeight;
   document.body.classList.toggle("is-landscape", isLandscape);
 }
 
-// === INIT GLOBALE ===      
+document.addEventListener("DOMContentLoaded", () => {
+  loadState();
+  loadArchives();
+  initHeaderDate();
+  initNav();
+  initLinesSidebar();
+  bindProductionForm();
+  initArretsForm();
+  bindOrganisationForm();
+  bindPersonnelForm();
+  bindExportGlobal();
+  initCalculator();
+  bindDDM();
+  bindRAZEquipe();
+  initHistoriqueEquipes();
+  initTheme();
 
-function updateOrientationLayout() {  
-  const isLandscape = window.innerWidth > window.innerHeight;  
-  document.body.classList.toggle("is-landscape", isLandscape);  
-}  
+  // Layout en fonction de l'orientation réelle du téléphone
+  updateOrientationLayout();
+  window.addEventListener("resize", updateOrientationLayout);
+  window.addEventListener("orientationchange", updateOrientationLayout);
 
-document.addEventListener("DOMContentLoaded", () => {      
-  loadState();      
-  loadArchives();      
-  initHeaderDate();      
-  initNav();      
-  initLinesSidebar();      
-  bindProductionForm();      
-  initArretsForm();      
-  bindOrganisationForm();      
-  bindPersonnelForm();      
-  bindExportGlobal();      
-  initCalculator();      
-  bindDDM();      
-  bindRAZEquipe();      
-  initHistoriqueEquipes();      
-  initTheme();      
-
-  // Gestion du layout en fonction de l'orientation réelle du téléphone  
-  updateOrientationLayout();  
-  window.addEventListener("resize", updateOrientationLayout);  
-  window.addEventListener("orientationchange", updateOrientationLayout);  
-
-  showSection(state.currentSection || "atelier");      
+  showSection(state.currentSection || "atelier");
 });
