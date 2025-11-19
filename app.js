@@ -833,6 +833,7 @@ function refreshAtelierChart() {
   }
 
   // Préparer les données : dernières cadences par ligne
+  // ✅ FILTRER uniquement les lignes avec des données
   const datasets = LINES.map(line => {
     const recs = state.production[line] || [];
     const cadences = recs
@@ -844,9 +845,10 @@ function refreshAtelierChart() {
       data: cadences.slice(-10), // 10 dernières valeurs
       borderWidth: 2,
       fill: false,
-      tension: 0.1
+      tension: 0.1,
+      hasData: cadences.length > 0  // ✅ Marqueur de données
     };
-  });
+  }).filter(dataset => dataset.hasData);  // ✅ Ne garder que les lignes avec données
 
   // Créer le graphique
   atelierChart = new Chart(canvas, {
@@ -865,7 +867,10 @@ function refreshAtelierChart() {
         }
       },
       plugins: {
-        legend: { display: true, position: 'bottom' }
+        legend: { 
+          display: datasets.length > 0,  // ✅ Masquer si aucune donnée
+          position: 'bottom' 
+        }
       }
     }
   });
