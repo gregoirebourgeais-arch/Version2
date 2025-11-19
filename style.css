@@ -1,4 +1,4 @@
-":root {
+:root {
   --bg: #0b1724;
   --bg-dark: #050b11;
   --card-bg: #111a28;
@@ -22,7 +22,7 @@
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: var(--bg-gradient);
   color: var(--text-main);
   min-height: 100vh;
@@ -147,7 +147,7 @@ h2 {
 }
 
 .card::before {
-  content: \"\";
+  content: "";
   position: absolute;
   inset: 0;
   background: radial-gradient(circle at top right, rgba(77, 163, 255, 0.12), transparent 65%);
@@ -169,7 +169,7 @@ h2 {
 }
 
 .card h3::before {
-  content: \"\";
+  content: "";
   width: 6px;
   height: 6px;
   border-radius: 999px;
@@ -397,6 +397,7 @@ textarea {
   gap: 8px;
   margin-top: 12px;
 }
+
 
 /* TABLES */
 
@@ -1015,4 +1016,4 @@ body.is-landscape {
     left: 12px;
   }
 }
-"
+
