@@ -61,18 +61,15 @@ const ARRET_MACHINES = {
 };
 
 // === ÉTAT GLOBAL ===
-// 👇 Version \"persistance par ligne\" (Option 1)
 let state = {
   currentSection: \"atelier\",
   currentLine: LINES[0],
-  currentEquipe: \"M\", // Ne dépend plus de l'heure
-  production: {},     // { line: [records] }
+  currentEquipe: \"M\",
+  production: {},
   arrets: [],
   organisation: [],
   personnel: [],
-
-  // Champs en cours (pendant saisie non enregistrée)
-  formDraft: {},      // { line: { start, end, qty, remaining, cadenceMan, arret, comment, article } }
+  formDraft: {},
 };
 
 // Références pour page Arrêts
@@ -80,6 +77,10 @@ let arretLineEl = null;
 let arretSousZoneEl = null;
 let arretSousZoneRowEl = null;
 let arretMachineEl = null;
+
+// Graphiques
+let atelierChart = null;
+let historyChart = null;
 
 /******************************
  *   PARTIE 1 / 4 – FONCTIONS DATE
@@ -127,6 +128,20 @@ function parseTimeToMinutes(t) {
   return h * 60 + m;
 }
 
+// Conversion quantième → Date
+function quantiemeToDate(quantieme, year) {
+  const date = new Date(year, 0);
+  date.setDate(quantieme);
+  return date;
+}
+
+// Formater date pour DDM
+function formatDateDDM(d) {
+  const dd = String(d.getDate()).padStart(2, \"0\");
+  const mm = String(d.getMonth() + 1).padStart(2, \"0\");
+  return `${dd}/${mm}/${d.getFullYear()}`;
+}
+
 /******************************
  *   PARTIE 1 / 4 – LOCAL STORAGE
  ******************************/
@@ -140,7 +155,6 @@ function loadState() {
     }
     const parsed = JSON.parse(raw);
 
-    // Reconstruction propre
     const base = {
       currentSection: \"atelier\",
       currentLine: LINES[0],
@@ -312,7 +326,6 @@ function computeCadenceFromInputs() {
   return hours > 0 ? q / hours : null;
 }
 
-// Cadence de référence = dernière cadence valide OU cadence manuelle
 function computeRefCadenceForLine(line) {
   const manualEl = document.getElementById(\"prodCadenceManual\");
   const mana = Number(manualEl?.value);
@@ -395,7 +408,7 @@ function loadDraft() {
 // === REFRESH FORMULAIRE PRODUCTION ===
 
 function refreshProductionForm() {
-  loadDraft(); // ← persistance OK
+  loadDraft();
 }
 
 // === TABLE HISTORIQUE DES PRODUCTIONS ===
@@ -473,7 +486,6 @@ function bindProductionForm() {
       const L = state.currentLine;
       const equipe = state.currentEquipe;
 
-      // → rec complet
       const rec = {
         dateTime: formatDateTime(now),
         equipe,
@@ -519,7 +531,7 @@ function bindProductionForm() {
   }
 }
 
-// === SCROLL HORIZONTAL PRODUCTION (fix) ===
+// === SCROLL HORIZONTAL PRODUCTION ===
 
 function refreshProductionView() {
   refreshProductionForm();
@@ -527,7 +539,7 @@ function refreshProductionView() {
 
   const table = document.getElementById(\"prodHistoryTable\");
   if (table && table.parentElement) {
-    table.parentElement.style.overflowX = \"auto\"; // ← scroll latéral ACTIVÉ
+    table.parentElement.style.overflowX = \"auto\";
   }
 }
 
@@ -806,8 +818,57 @@ function refreshPersonnelView() {
 }
 
 /********************************************
- *   PARTIE 3 / 4 – SCROLL ATELIER
+ *   PARTIE 3 / 4 – GRAPHIQUES ATELIER
  ********************************************/
+
+function refreshAtelierChart() {
+  const canvas = document.getElementById(\"atelierChart\");
+  if (!canvas || typeof Chart === 'undefined') return;
+
+  // Détruire l'ancien graphique
+  if (atelierChart) {
+    atelierChart.destroy();
+    atelierChart = null;
+  }
+
+  // Préparer les données : dernières cadences par ligne
+  const datasets = LINES.map(line => {
+    const recs = state.production[line] || [];
+    const cadences = recs
+      .filter(r => r.cadence && r.cadence > 0)
+      .map(r => r.cadence);
+
+    return {
+      label: line,
+      data: cadences.slice(-10), // 10 dernières valeurs
+      borderWidth: 2,
+      fill: false,
+      tension: 0.1
+    };
+  });
+
+  // Créer le graphique
+  atelierChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: Array.from({ length: 10 }, (_, i) => `#${i + 1}`),
+      datasets: datasets
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: 'Cadence (colis/h)' }
+        }
+      },
+      plugins: {
+        legend: { display: true, position: 'bottom' }
+      }
+    }
+  });
+}
 
 function refreshAtelierView() {
   const container = document.getElementById(\"atelier-lines-summary\");
@@ -865,17 +926,18 @@ function refreshAtelierView() {
       tbody.appendChild(tr);
     });
 
-  // scroll horizontal ATELIER (pour les arrêts)
+  // scroll horizontal ATELIER
   if (table.parentElement) {
     table.parentElement.style.overflowX = \"auto\";
   }
+
+  // Rafraîchir le graphique
+  refreshAtelierChart();
 }
 
 /********************************************
  *   PARTIE 3 / 4 – HISTORIQUE ÉQUIPES
  ********************************************/
-
-let historyChart = null;
 
 function initHistoriqueEquipes() {
   const select = document.getElementById(\"historySelect\");
@@ -925,7 +987,6 @@ function clearHistoryView() {
   }
 }
 
-// ✅ FONCTION MANQUANTE AJOUTÉE
 function refreshHistoryView(snapshot) {
   if (!snapshot || !snapshot.state) return;
 
@@ -960,21 +1021,23 @@ function refreshHistoryView(snapshot) {
     if (tbody) {
       tbody.innerHTML = \"\";
 
-      (savedState.arrets || []).forEach(rec => {
-        const tr = document.createElement(\"tr\");
-        tr.innerHTML = `
-          <td>${rec.line}</td>
-          <td>${rec.sousLigne || \"-\"}</td>
-          <td>${rec.machine}</td>
-          <td>${rec.duration}</td>
-          <td>${rec.comment || \"\"}</td>
-        `;
-        tbody.appendChild(tr);
-      });
+      (savedState.arrets || [])
+        .sort((a, b) => (b.duration || 0) - (a.duration || 0))
+        .forEach(rec => {
+          const tr = document.createElement(\"tr\");
+          tr.innerHTML = `
+            <td>${rec.line}</td>
+            <td>${rec.sousLigne || \"-\"}</td>
+            <td>${rec.machine}</td>
+            <td>${rec.duration}</td>
+            <td>${rec.comment || \"\"}</td>
+          `;
+          tbody.appendChild(tr);
+        });
     }
   }
 
-  // Graphique Chart.js (si disponible)
+  // Graphique Chart.js
   const chartCanvas = document.getElementById(\"historyChart\");
   if (chartCanvas && typeof Chart !== 'undefined') {
     if (historyChart) historyChart.destroy();
@@ -999,6 +1062,7 @@ function refreshHistoryView(snapshot) {
       },
       options: {
         responsive: true,
+        maintainAspectRatio: true,
         scales: {
           y: { beginAtZero: true }
         }
@@ -1008,20 +1072,18 @@ function refreshHistoryView(snapshot) {
 }
 
 /********************************************
- *   PARTIE 4 / 4 – EXPORT GLOBAL (1 SEUL ONGLET)
+ *   PARTIE 4 / 4 – EXPORT GLOBAL
  ********************************************/
 
 function exportStateToExcel(srcState, filename) {
-  // Vérifier que la bibliothèque XLSX est chargée
   if (typeof XLSX === 'undefined') {
     alert(\"Bibliothèque XLSX non chargée. Impossible d'exporter.\");
-    console.error(\"XLSX library not found. Please include SheetJS library.\");
+    console.error(\"XLSX library not found.\");
     return;
   }
 
   const wb = XLSX.utils.book_new();
 
-  // === UN SEUL ONGLET ===
   const rows = [[
     \"Type\",
     \"Date/Heure\",
@@ -1043,7 +1105,7 @@ function exportStateToExcel(srcState, filename) {
     \"Validée organisation\"
   ]];
 
-  // === PRODUCTION ===
+  // PRODUCTION
   LINES.forEach(line => {
     const recs = srcState.production[line] || [];
     recs.forEach(r => {
@@ -1070,7 +1132,7 @@ function exportStateToExcel(srcState, filename) {
     });
   });
 
-  // === ARRETS ===
+  // ARRETS
   srcState.arrets.forEach(r => {
     rows.push([
       \"ARRET\",
@@ -1094,7 +1156,7 @@ function exportStateToExcel(srcState, filename) {
     ]);
   });
 
-  // === ORGANISATION ===
+  // ORGANISATION
   srcState.organisation.forEach(r => {
     rows.push([
       \"ORGANISATION\",
@@ -1118,7 +1180,7 @@ function exportStateToExcel(srcState, filename) {
     ]);
   });
 
-  // === PERSONNEL ===
+  // PERSONNEL
   srcState.personnel.forEach(r => {
     rows.push([
       \"PERSONNEL\",
@@ -1147,7 +1209,6 @@ function exportStateToExcel(srcState, filename) {
   XLSX.writeFile(wb, filename);
 }
 
-// === BIND EXPORT ===
 function bindExportGlobal() {
   const btn = document.getElementById(\"exportGlobalBtn\");
   if (!btn) return;
@@ -1164,7 +1225,7 @@ function bindExportGlobal() {
 }
 
 /********************************************
- *   PARTIE RAZ ÉQUIPE  – changement manuel
+ *   PARTIE RAZ ÉQUIPE
  ********************************************/
 
 function bindRAZEquipe() {
@@ -1180,7 +1241,6 @@ function bindRAZEquipe() {
     const hh = String(now.getHours()).padStart(2, \"0\");
     const mm = String(now.getMinutes()).padStart(2, \"0\");
 
-    // Choisir équipe finissante
     let finished = prompt(
       \"Quelle équipe vient de finir ? (M, AM, N)\",
       state.currentEquipe
@@ -1193,7 +1253,6 @@ function bindRAZEquipe() {
       return;
     }
 
-    // Snapshot archive
     const snap = {
       id: now.toISOString(),
       savedAt: formatDateTime(now),
@@ -1208,12 +1267,10 @@ function bindRAZEquipe() {
     saveArchives();
     refreshHistorySelect();
 
-    // Export du snapshot
     const filename =
       `Atelier_EQ${finished}_Q${quantieme}_S${week}_${hh}h${mm}.xlsx`;
     exportStateToExcel(snap.state, filename);
 
-    // Calcul équipe suivante
     let next = \"M\";
     if (finished === \"M\") next = \"AM\";
     else if (finished === \"AM\") next = \"N\";
@@ -1221,10 +1278,9 @@ function bindRAZEquipe() {
 
     state.currentEquipe = next;
 
-    // Reset complet
     LINES.forEach(l => {
       state.production[l] = [];
-      state.formDraft[l] = {}; // vider brouillons
+      state.formDraft[l] = {};
     });
     state.arrets = [];
     state.organisation = [];
@@ -1240,21 +1296,186 @@ function bindRAZEquipe() {
 
     alert(`RAZ OK. Nouvelle équipe active : ${next}`);
   });
-} // ✅ ACCOLADE FERMANTE AJOUTÉE
+}
 
-// === THÈME CLAIR / SOMBRE ===  
+/********************************************
+ *   DDM - VALIDATION DATE DURABILITÉ MINIMALE
+ ********************************************/
+
+function bindDDM() {
+  const calcBtn = document.getElementById(\"ddmCalcBtn\");
+  if (!calcBtn) return;
+
+  // Pré-remplir avec l'année courante
+  const anneeEl = document.getElementById(\"ddmAnnee\");
+  if (anneeEl && !anneeEl.value) {
+    anneeEl.value = getNow().getFullYear();
+  }
+
+  calcBtn.addEventListener(\"click\", () => {
+    const quantieme = Number(document.getElementById(\"ddmQuantieme\")?.value);
+    const annee = Number(document.getElementById(\"ddmAnnee\")?.value);
+    const duree = Number(document.getElementById(\"ddmDuree\")?.value);
+
+    const resultEl = document.getElementById(\"ddmResult\");
+    if (!resultEl) return;
+
+    // Validation
+    if (!quantieme || quantieme < 1 || quantieme > 366) {
+      resultEl.textContent = \"Quantième invalide (1-366)\";
+      resultEl.style.color = \"red\";
+      return;
+    }
+
+    if (!annee || annee < 2000 || annee > 2100) {
+      resultEl.textContent = \"Année invalide\";
+      resultEl.style.color = \"red\";
+      return;
+    }
+
+    if (!duree || duree < 0) {
+      resultEl.textContent = \"Durée invalide\";
+      resultEl.style.color = \"red\";
+      return;
+    }
+
+    // Calcul : Quantième → Date → + durée
+    const dateFab = quantiemeToDate(quantieme, annee);
+    const dateDDM = new Date(dateFab);
+    dateDDM.setDate(dateDDM.getDate() + duree);
+
+    const ddmStr = formatDateDDM(dateDDM);
+    const quantiemeDDM = getQuantieme(dateDDM);
+
+    resultEl.textContent = `${ddmStr} (Quantième ${quantiemeDDM})`;
+    resultEl.style.color = \"green\";
+  });
+}
+
+/********************************************
+ *   CALCULATRICE FLOTTANTE
+ ********************************************/
+
+function initCalculator() {
+  const calcWidget = document.getElementById(\"calculator\");
+  const calcToggle = document.getElementById(\"calcToggle\");
+  const calcClose = document.getElementById(\"calcCloseBtn\");
+  const calcDisplay = document.getElementById(\"calcDisplay\");
+
+  if (!calcWidget || !calcToggle || !calcClose || !calcDisplay) return;
+
+  let currentValue = \"0\";
+  let operator = null;
+  let previousValue = null;
+  let waitingForOperand = false;
+
+  function updateDisplay() {
+    calcDisplay.value = currentValue;
+  }
+
+  function clear() {
+    currentValue = \"0\";
+    operator = null;
+    previousValue = null;
+    waitingForOperand = false;
+    updateDisplay();
+  }
+
+  function inputDigit(digit) {
+    if (waitingForOperand) {
+      currentValue = String(digit);
+      waitingForOperand = false;
+    } else {
+      currentValue = currentValue === \"0\" ? String(digit) : currentValue + digit;
+    }
+    updateDisplay();
+  }
+
+  function inputDecimal() {
+    if (waitingForOperand) {
+      currentValue = \"0.\";
+      waitingForOperand = false;
+    } else if (currentValue.indexOf(\".\") === -1) {
+      currentValue += \".\";
+    }
+    updateDisplay();
+  }
+
+  function performOperation(nextOperator) {
+    const inputValue = parseFloat(currentValue);
+
+    if (previousValue === null) {
+      previousValue = inputValue;
+    } else if (operator) {
+      const result = calculate(previousValue, inputValue, operator);
+      currentValue = String(result);
+      previousValue = result;
+    }
+
+    waitingForOperand = true;
+    operator = nextOperator;
+    updateDisplay();
+  }
+
+  function calculate(prev, current, op) {
+    switch (op) {
+      case \"+\": return prev + current;
+      case \"-\": return prev - current;
+      case \"*\": return prev * current;
+      case \"/\": return current !== 0 ? prev / current : 0;
+      default: return current;
+    }
+  }
+
+  // Toggle affichage
+  calcToggle.addEventListener(\"click\", () => {
+    calcWidget.classList.toggle(\"hidden\");
+  });
+
+  calcClose.addEventListener(\"click\", () => {
+    calcWidget.classList.add(\"hidden\");
+  });
+
+  // Boutons calculatrice
+  document.querySelectorAll(\".calc-btn\").forEach(btn => {
+    btn.addEventListener(\"click\", () => {
+      const value = btn.dataset.value;
+      const action = btn.dataset.action;
+
+      if (value && !action) {
+        if (value === \".\") {
+          inputDecimal();
+        } else if ([\"+\", \"-\", \"*\", \"/\"].includes(value)) {
+          performOperation(value);
+        } else {
+          inputDigit(value);
+        }
+      } else if (action === \"clear\") {
+        clear();
+      } else if (action === \"equals\") {
+        performOperation(null);
+        operator = null;
+        waitingForOperand = true;
+      }
+    });
+  });
+
+  updateDisplay();
+}
+
+/********************************************
+ *   THÈME CLAIR / SOMBRE
+ ********************************************/
 
 function initTheme() {
   const btn = document.getElementById(\"themeToggleBtn\");
   if (!btn) return;
 
-  // Charger le thème sauvegardé
   const saved = localStorage.getItem(\"themeMode\");
   if (saved === \"light\") {
     document.body.classList.add(\"light-mode\");
   }
 
-  // Toggle du thème
   btn.addEventListener(\"click\", () => {
     document.body.classList.toggle(\"light-mode\");
 
@@ -1266,26 +1487,18 @@ function initTheme() {
   });
 }
 
-// ✅ FONCTIONS MANQUANTES AJOUTÉES (stubs basiques)
-
-function initCalculator() {
-  // Fonction pour initialiser une calculatrice (si nécessaire)
-  // Ajoutez votre logique ici si cette fonctionnalité existe
-  console.log(\"Calculator initialized (stub)\");
-}
-
-function bindDDM() {
-  // Fonction pour gérer les DDM (Date de Durabilité Minimale?)
-  // Ajoutez votre logique ici si cette fonctionnalité existe
-  console.log(\"DDM binding initialized (stub)\");
-}
-
-// === INIT GLOBALE / ORIENTATION ===
+/********************************************
+ *   ORIENTATION
+ ********************************************/
 
 function updateOrientationLayout() {
   const isLandscape = window.innerWidth > window.innerHeight;
   document.body.classList.toggle(\"is-landscape\", isLandscape);
 }
+
+/********************************************
+ *   INIT GLOBALE
+ ********************************************/
 
 document.addEventListener(\"DOMContentLoaded\", () => {
   loadState();
@@ -1298,13 +1511,12 @@ document.addEventListener(\"DOMContentLoaded\", () => {
   bindOrganisationForm();
   bindPersonnelForm();
   bindExportGlobal();
-  initCalculator(); // ✅ Fonction ajoutée
-  bindDDM(); // ✅ Fonction ajoutée
+  initCalculator();
+  bindDDM();
   bindRAZEquipe();
   initHistoriqueEquipes();
   initTheme();
 
-  // Layout en fonction de l'orientation réelle du téléphone
   updateOrientationLayout();
   window.addEventListener(\"resize\", updateOrientationLayout);
   window.addEventListener(\"orientationchange\", updateOrientationLayout);
