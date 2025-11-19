@@ -498,7 +498,6 @@ textarea {
 }
 
 .secondary-btn {
-.secondary-btn {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: var(--text-main);
@@ -512,25 +511,27 @@ textarea {
 /* DANGER BUTTON */
 
 .danger-btn {
-  border-radius: 999px;
-  padding: 7px 14px;
-  background: var(--danger);
+  border-radius: 10px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #ff5f6c, #ff4452);
   color: #fff;
-  border: none;
+  border: 1px solid rgba(255, 95, 108, 0.3);
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 500;
   transition: all 0.2s ease;
-  box-shadow: var(--shadow-light);
-  opacity: 1;
+  box-shadow: 0 4px 12px rgba(255, 68, 82, 0.3);
 }
 
 .danger-btn:hover {
-  background: #ff4452;
-  transform: translateY(-1px);
+  background: linear-gradient(135deg, #ff4452, #ff3342);
+  box-shadow: 0 6px 16px rgba(255, 68, 82, 0.4);
+  transform: translateY(-2px);
 }
 
 .danger-btn:active {
   transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(255, 68, 82, 0.3);
 }
 
 /* THEME TOGGLE */
@@ -574,17 +575,25 @@ textarea {
   position: fixed;
   right: 12px;
   bottom: 14px;
-  width: 56px;
-  height: 56px;
+  width: 60px;
+  height: 60px;
   border-radius: 999px;
   border: none;
   background: var(--accent);
   color: #020509;
-  font-size: 1.5rem;
+  font-size: 1.8rem;
   box-shadow: var(--shadow-soft);
   cursor: pointer;
   z-index: 40;
   transition: all 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .calculator-toggle {
+    width: 56px;
+    height: 56px;
+    font-size: 1.5rem;
+  }
 }
 
 .calculator-toggle:hover {
@@ -598,19 +607,22 @@ textarea {
 .calculator {
   position: fixed;
   right: 12px;
-  bottom: 70px;
-  width: 240px;
+  bottom: 82px;
+  width: 260px;
   background: #050b11;
   border-radius: 16px;
   box-shadow: var(--shadow-soft);
   border: var(--border-subtle);
   z-index: 50;
-  padding: 12px;
+  padding: 14px;
   animation: fadeIn 0.2s ease-out;
 }
 
 .calculator.hidden {
-  display: none;
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .calc-header {
@@ -662,16 +674,16 @@ textarea {
 .calc-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  gap: 8px;
 }
 
 .calc-btn {
   background: #0f1a2b;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  padding: 12px;
+  padding: 14px 10px;
   color: var(--text-main);
-  font-size: 1rem;
+  font-size: 1.1rem;
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -1021,4 +1033,6 @@ body.is-landscape {
     left: 12px;
   }
 }
+
+
 
