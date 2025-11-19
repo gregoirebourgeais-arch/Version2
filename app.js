@@ -1,71 +1,71 @@
-/******************************
+"/******************************
  *   PARTIE 1 / 4 – CONFIG
  ******************************/
 
 // === CONFIG & ÉTAT GLOBAL ===
 
 const LINES = [
-  "Râpé",
-  "T2",
-  "RT",
-  "OMORI",
-  "T1",
-  "Sticks",
-  "Emballage",
-  "Dés",
-  "Filets",
-  "Prédécoupé",
+  \"Râpé\",
+  \"T2\",
+  \"RT\",
+  \"OMORI\",
+  \"T1\",
+  \"Sticks\",
+  \"Emballage\",
+  \"Dés\",
+  \"Filets\",
+  \"Prédécoupé\",
 ];
 
 // Stockage version
-const STORAGE_KEY = "atelier_ppnc_state_v2";  
-const ARCHIVES_KEY = "atelier_ppnc_archives_v2";
+const STORAGE_KEY = \"atelier_ppnc_state_v2\";  
+const ARCHIVES_KEY = \"atelier_ppnc_archives_v2\";
 
 let archives = []; // [{ id, label, savedAt, equipe, week, quantieme, state }]
 
 // Sous-lignes pour Râpé
 const ARRET_SUBLINES = {
-  "Râpé": ["R1", "R2", "R1/R2"],
+  \"Râpé\": [\"R1\", \"R2\", \"R1/R2\"],
 };
 
 // Machines déclarées
 const ARRET_MACHINES = {
-  "Râpé": [
-    "Cubeuse", "Cheesix", "Liftvrac", "Associative", "Ensacheuse",
-    "Encaisseuse", "Smartdate", "Bizerba", "DPM", "Scotcheuse",
-    "Markem", "Ascenseur",
+  \"Râpé\": [
+    \"Cubeuse\", \"Cheesix\", \"Liftvrac\", \"Associative\", \"Ensacheuse\",
+    \"Encaisseuse\", \"Smartdate\", \"Bizerba\", \"DPM\", \"Scotcheuse\",
+    \"Markem\", \"Ascenseur\",
   ],
-  "T2": [
-    "Selvex", "Trieuse", "Robots", "Tiromat", "Vision",
-    "Convoyeur", "DPM", "Bizerba", "Suremballage", "Markem",
-    "Scotcheuse", "Balance cartons", "Formeuse caisse", "Ascenseur",
+  \"T2\": [
+    \"Selvex\", \"Trieuse\", \"Robots\", \"Tiromat\", \"Vision\",
+    \"Convoyeur\", \"DPM\", \"Bizerba\", \"Suremballage\", \"Markem\",
+    \"Scotcheuse\", \"Balance cartons\", \"Formeuse caisse\", \"Ascenseur\",
   ],
-  "OMORI": [
-    "BFR", "Accumulateur", "OMORI", "Videojet", "DPM",
-    "Encaisseuse", "Balance cartons", "Ascenseur",
+  \"OMORI\": [
+    \"BFR\", \"Accumulateur\", \"OMORI\", \"Videojet\", \"DPM\",
+    \"Encaisseuse\", \"Balance cartons\", \"Ascenseur\",
   ],
-  "Emballage": [
-    "Brinkman", "Encaisseuse", "Bizerba", "Palettiseur",
-    "Paraffineuse", "Râpé", "Ecroûtage", "Alpma",
+  \"Emballage\": [
+    \"Brinkman\", \"Encaisseuse\", \"Bizerba\", \"Palettiseur\",
+    \"Paraffineuse\", \"Râpé\", \"Ecroûtage\", \"Alpma\",
   ],
-  "T1": [
-    "Slicer", "AES", "Tiromat", "Préhenseur",
-    "DPM", "Encaisseuse T1", "Encaisseuse David",
-    "Balance cartons", "Ascenseur",
+  \"T1\": [
+    \"Slicer\", \"AES\", \"Tiromat\", \"Préhenseur\",
+    \"DPM\", \"Encaisseuse T1\", \"Encaisseuse David\",
+    \"Balance cartons\", \"Ascenseur\",
   ],
-  "Dés": ["Cheesix", "Meca 2002", "DPM", "Bizerba", "Scotcheuse"],
-  "Filets": ["Lieuse", "C-Pack", "Etiqueteuse", "Scotcheuse"],
-  "Prédécoupé": ["DPM", "Selvex", "Bizerba", "Quartivac", "Scotcheuse"],
-  "RT": ["Autre"],
-  "Sticks": ["Autre"],
+  \"Dés\": [\"Cheesix\", \"Meca 2002\", \"DPM\", \"Bizerba\", \"Scotcheuse\"],
+  \"Filets\": [\"Lieuse\", \"C-Pack\", \"Etiqueteuse\", \"Scotcheuse\"],
+  \"Prédécoupé\": [\"DPM\", \"Selvex\", \"Bizerba\", \"Quartivac\", \"Scotcheuse\"],
+  \"RT\": [\"Autre\"],
+  \"Sticks\": [\"Autre\"],
 };
 
 // === ÉTAT GLOBAL ===
-// 👇 Version “persistance par ligne” (Option 1)
+// 👇 Version \"persistance par ligne\" (Option 1)
 let state = {
-  currentSection: "atelier",
+  currentSection: \"atelier\",
   currentLine: LINES[0],
-  currentEquipe: "M", // Ne dépend plus de l’heure
+  currentEquipe: \"M\", // Ne dépend plus de l'heure
   production: {},     // { line: [records] }
   arrets: [],
   organisation: [],
@@ -104,15 +104,15 @@ function getQuantieme(d) {
 }
 
 function formatDateTime(d) {
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, \"0\");
+  const mm = String(d.getMonth() + 1).padStart(2, \"0\");
+  const hh = String(d.getHours()).padStart(2, \"0\");
+  const mi = String(d.getMinutes()).padStart(2, \"0\");
   return `${dd}/${mm}/${d.getFullYear()} ${hh}h${mi}`;
 }
 
 function formatTimeRemaining(min) {
-  if (!min || min <= 0) return "-";
+  if (!min || min <= 0) return \"-\";
   const h = Math.floor(min / 60);
   const m = Math.round(min % 60);
   if (h === 0) return `${m} min`;
@@ -122,7 +122,7 @@ function formatTimeRemaining(min) {
 
 function parseTimeToMinutes(t) {
   if (!t) return null;
-  const [h, m] = t.split(":").map(Number);
+  const [h, m] = t.split(\":\").map(Number);
   if (isNaN(h) || isNaN(m)) return null;
   return h * 60 + m;
 }
@@ -142,9 +142,9 @@ function loadState() {
 
     // Reconstruction propre
     const base = {
-      currentSection: "atelier",
+      currentSection: \"atelier\",
       currentLine: LINES[0],
-      currentEquipe: "M",
+      currentEquipe: \"M\",
       production: {},
       arrets: [],
       organisation: [],
@@ -160,7 +160,7 @@ function loadState() {
     });
 
   } catch (e) {
-    console.error("loadState error", e);
+    console.error(\"loadState error\", e);
     LINES.forEach(l => state.production[l] = []);
   }
 }
@@ -169,7 +169,7 @@ function saveState() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
-    console.error("saveState error", e);
+    console.error(\"saveState error\", e);
   }
 }
 
@@ -193,17 +193,18 @@ function saveArchives() {
  ******************************/
 
 function initHeaderDate() {
-  const el = document.getElementById("header-datetime");
+  const el = document.getElementById(\"header-datetime\");
+  if (!el) return;
 
   function update() {
     const now = getNow();
     const week = getWeekNumber(now);
     const q = getQuantieme(now);
 
-    const d = String(now.getDate()).padStart(2, "0");
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    const hh = String(now.getHours()).padStart(2, "0");
-    const mm = String(now.getMinutes()).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, \"0\");
+    const m = String(now.getMonth() + 1).padStart(2, \"0\");
+    const hh = String(now.getHours()).padStart(2, \"0\");
+    const mm = String(now.getMinutes()).padStart(2, \"0\");
 
     el.textContent =
       `Quantième ${q} • ${d}/${m}/${now.getFullYear()} • ` +
@@ -213,6 +214,7 @@ function initHeaderDate() {
   update();
   setInterval(update, 30000);
 }
+
 /********************************************
  *   PARTIE 2 / 4 – NAVIGATION + PRODUCTION
  ********************************************/
@@ -223,24 +225,24 @@ function showSection(section) {
   state.currentSection = section;
   saveState();
 
-  document.querySelectorAll(".section").forEach(sec =>
-    sec.classList.toggle("visible", sec.id === `section-${section}`)
+  document.querySelectorAll(\".section\").forEach(sec =>
+    sec.classList.toggle(\"visible\", sec.id === `section-${section}`)
   );
 
-  document.querySelectorAll(".nav-btn").forEach(btn =>
-    btn.classList.toggle("active", btn.dataset.section === section)
+  document.querySelectorAll(\".nav-btn\").forEach(btn =>
+    btn.classList.toggle(\"active\", btn.dataset.section === section)
   );
 
-  if (section === "atelier") refreshAtelierView();
-  else if (section === "production") refreshProductionView();
-  else if (section === "arrets") refreshArretsView();
-  else if (section === "organisation") refreshOrganisationView();
-  else if (section === "personnel") refreshPersonnelView();
+  if (section === \"atelier\") refreshAtelierView();
+  else if (section === \"production\") refreshProductionView();
+  else if (section === \"arrets\") refreshArretsView();
+  else if (section === \"organisation\") refreshOrganisationView();
+  else if (section === \"personnel\") refreshPersonnelView();
 }
 
 function initNav() {
-  document.querySelectorAll(".nav-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
+  document.querySelectorAll(\".nav-btn\").forEach(btn => {
+    btn.addEventListener(\"click\", () => {
       showSection(btn.dataset.section);
     });
   });
@@ -249,16 +251,18 @@ function initNav() {
 // === LIGNES (Production) ===
 
 function initLinesSidebar() {
-  const container = document.getElementById("linesList");
-  container.innerHTML = "";
+  const container = document.getElementById(\"linesList\");
+  if (!container) return;
+  
+  container.innerHTML = \"\";
 
   LINES.forEach(line => {
-    const btn = document.createElement("button");
-    btn.className = "line-btn";
+    const btn = document.createElement(\"button\");
+    btn.className = \"line-btn\";
     btn.textContent = line;
     btn.dataset.line = line;
 
-    btn.addEventListener("click", () => selectLine(line, true));
+    btn.addEventListener(\"click\", () => selectLine(line, true));
 
     container.appendChild(btn);
   });
@@ -270,18 +274,19 @@ function selectLine(line, scrollToForm) {
   state.currentLine = line;
   saveState();
 
-  document.getElementById("currentLineTitle").textContent = `Ligne ${line}`;
+  const titleEl = document.getElementById(\"currentLineTitle\");
+  if (titleEl) titleEl.textContent = `Ligne ${line}`;
 
-  document.querySelectorAll(".line-btn").forEach(b =>
-    b.classList.toggle("active", b.dataset.line === line)
+  document.querySelectorAll(\".line-btn\").forEach(b =>
+    b.classList.toggle(\"active\", b.dataset.line === line)
   );
 
   refreshProductionForm();
   refreshProductionHistoryTable();
 
   if (scrollToForm) {
-    const card = document.querySelector("#section-production .card");
-    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+    const card = document.querySelector(\"#section-production .card\");
+    if (card) card.scrollIntoView({ behavior: \"smooth\", block: \"start\" });
   }
 }
 
@@ -292,9 +297,9 @@ function getCurrentLineRecords() {
 }
 
 function computeCadenceFromInputs() {
-  const s = document.getElementById("prodStartTime").value;
-  const e = document.getElementById("prodEndTime").value;
-  const q = Number(document.getElementById("prodQuantity").value) || 0;
+  const s = document.getElementById(\"prodStartTime\")?.value;
+  const e = document.getElementById(\"prodEndTime\")?.value;
+  const q = Number(document.getElementById(\"prodQuantity\")?.value) || 0;
 
   const sMin = parseTimeToMinutes(s);
   const eMin = parseTimeToMinutes(e);
@@ -309,7 +314,8 @@ function computeCadenceFromInputs() {
 
 // Cadence de référence = dernière cadence valide OU cadence manuelle
 function computeRefCadenceForLine(line) {
-  const mana = Number(document.getElementById("prodCadenceManual").value);
+  const manualEl = document.getElementById(\"prodCadenceManual\");
+  const mana = Number(manualEl?.value);
   if (mana > 0) return mana;
 
   const recs = state.production[line] || [];
@@ -323,18 +329,21 @@ function computeRefCadenceForLine(line) {
 
 function updateCadenceDisplay() {
   const cad = computeCadenceFromInputs();
-  document.getElementById("prodCadenceDisplay").textContent =
-    cad ? cad.toFixed(2) : "-";
+  const el = document.getElementById(\"prodCadenceDisplay\");
+  if (el) el.textContent = cad ? cad.toFixed(2) : \"-\";
 }
 
 function updateRemainingTimeDisplay() {
-  const remaining = Number(document.getElementById("prodRemaining").value) || 0;
+  const remainingEl = document.getElementById(\"prodRemaining\");
+  const remaining = Number(remainingEl?.value) || 0;
   const line = state.currentLine;
   const cadRef = computeRefCadenceForLine(line);
-  const el = document.getElementById("prodRemainingTimeDisplay");
+  const el = document.getElementById(\"prodRemainingTimeDisplay\");
+
+  if (!el) return;
 
   if (!remaining || !cadRef || cadRef <= 0) {
-    el.textContent = "-";
+    el.textContent = \"-\";
     return;
   }
 
@@ -348,14 +357,14 @@ function saveDraft() {
   const L = state.currentLine;
 
   state.formDraft[L] = {
-    start: document.getElementById("prodStartTime").value || "",
-    end: document.getElementById("prodEndTime").value || "",
-    qty: document.getElementById("prodQuantity").value || "",
-    remaining: document.getElementById("prodRemaining").value || "",
-    cadenceMan: document.getElementById("prodCadenceManual").value || "",
-    arret: document.getElementById("prodArretMinutes").value || "",
-    comment: document.getElementById("prodComment").value || "",
-    article: document.getElementById("prodCodeArticle").value || "",
+    start: document.getElementById(\"prodStartTime\")?.value || \"\",
+    end: document.getElementById(\"prodEndTime\")?.value || \"\",
+    qty: document.getElementById(\"prodQuantity\")?.value || \"\",
+    remaining: document.getElementById(\"prodRemaining\")?.value || \"\",
+    cadenceMan: document.getElementById(\"prodCadenceManual\")?.value || \"\",
+    arret: document.getElementById(\"prodArretMinutes\")?.value || \"\",
+    comment: document.getElementById(\"prodComment\")?.value || \"\",
+    article: document.getElementById(\"prodCodeArticle\")?.value || \"\",
   };
 
   saveState();
@@ -365,14 +374,19 @@ function loadDraft() {
   const L = state.currentLine;
   const d = state.formDraft[L] || {};
 
-  document.getElementById("prodStartTime").value = d.start || "";
-  document.getElementById("prodEndTime").value = d.end || "";
-  document.getElementById("prodQuantity").value = d.qty || "";
-  document.getElementById("prodRemaining").value = d.remaining || "";
-  document.getElementById("prodCadenceManual").value = d.cadenceMan || "";
-  document.getElementById("prodArretMinutes").value = d.arret || "";
-  document.getElementById("prodComment").value = d.comment || "";
-  document.getElementById("prodCodeArticle").value = d.article || "";
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val || \"\";
+  };
+
+  setVal(\"prodStartTime\", d.start);
+  setVal(\"prodEndTime\", d.end);
+  setVal(\"prodQuantity\", d.qty);
+  setVal(\"prodRemaining\", d.remaining);
+  setVal(\"prodCadenceManual\", d.cadenceMan);
+  setVal(\"prodArretMinutes\", d.arret);
+  setVal(\"prodComment\", d.comment);
+  setVal(\"prodCodeArticle\", d.article);
 
   updateCadenceDisplay();
   updateRemainingTimeDisplay();
@@ -387,33 +401,36 @@ function refreshProductionForm() {
 // === TABLE HISTORIQUE DES PRODUCTIONS ===
 
 function refreshProductionHistoryTable() {
-  const tbody = document
-    .getElementById("prodHistoryTable")
-    .querySelector("tbody");
-  tbody.innerHTML = "";
+  const table = document.getElementById(\"prodHistoryTable\");
+  if (!table) return;
+  
+  const tbody = table.querySelector(\"tbody\");
+  if (!tbody) return;
+  
+  tbody.innerHTML = \"\";
 
   getCurrentLineRecords().forEach((rec, idx) => {
-    const tr = document.createElement("tr");
+    const tr = document.createElement(\"tr\");
 
     tr.innerHTML = `
       <td>${rec.dateTime}</td>
       <td>${rec.equipe}</td>
-      <td>${rec.start || "-"}</td>
-      <td>${rec.end || "-"}</td>
+      <td>${rec.start || \"-\"}</td>
+      <td>${rec.end || \"-\"}</td>
       <td>${rec.quantity}</td>
       <td>${rec.arret || 0}</td>
-      <td>${rec.cadence ? rec.cadence.toFixed(2) : "-"}</td>
-      <td>${rec.remainingTime || "-"}</td>
-      <td>${rec.comment || ""}</td>
-      <td>${rec.article || ""}</td>
-      <td><button class="secondary-btn" data-idx="${idx}">✕</button></td>
+      <td>${rec.cadence ? rec.cadence.toFixed(2) : \"-\"}</td>
+      <td>${rec.remainingTime || \"-\"}</td>
+      <td>${rec.comment || \"\"}</td>
+      <td>${rec.article || \"\"}</td>
+      <td><button class=\"secondary-btn\" data-idx=\"${idx}\">✕</button></td>
     `;
 
     tbody.appendChild(tr);
   });
 
-  tbody.querySelectorAll("button[data-idx]").forEach(btn => {
-    btn.addEventListener("click", () => {
+  tbody.querySelectorAll(\"button[data-idx]\").forEach(btn => {
+    btn.addEventListener(\"click\", () => {
       const arr = getCurrentLineRecords();
       const i = Number(btn.dataset.idx);
       arr.splice(i, 1);
@@ -427,69 +444,79 @@ function refreshProductionHistoryTable() {
 // === FORM BINDING ===
 
 function bindProductionForm() {
-  [
-    "prodStartTime",
-    "prodEndTime",
-    "prodQuantity",
-    "prodRemaining",
-    "prodCadenceManual",
-    "prodArretMinutes",
-    "prodComment",
-    "prodCodeArticle"
-  ].forEach(id => {
+  const formIds = [
+    \"prodStartTime\",
+    \"prodEndTime\",
+    \"prodQuantity\",
+    \"prodRemaining\",
+    \"prodCadenceManual\",
+    \"prodArretMinutes\",
+    \"prodComment\",
+    \"prodCodeArticle\"
+  ];
+
+  formIds.forEach(id => {
     const el = document.getElementById(id);
-    el.addEventListener("input", () => {
-      if (id !== "prodComment") updateCadenceDisplay();
-      if (id !== "prodComment") updateRemainingTimeDisplay();
+    if (!el) return;
+    
+    el.addEventListener(\"input\", () => {
+      if (id !== \"prodComment\") updateCadenceDisplay();
+      if (id !== \"prodComment\") updateRemainingTimeDisplay();
       saveDraft();
     });
   });
 
-  document.getElementById("prodSaveBtn").addEventListener("click", () => {
-    const now = getNow();
-    const L = state.currentLine;
-    const equipe = state.currentEquipe;
+  const saveBtn = document.getElementById(\"prodSaveBtn\");
+  if (saveBtn) {
+    saveBtn.addEventListener(\"click\", () => {
+      const now = getNow();
+      const L = state.currentLine;
+      const equipe = state.currentEquipe;
 
-    // → rec complet
-    const rec = {
-      dateTime: formatDateTime(now),
-      equipe,
-      start: document.getElementById("prodStartTime").value,
-      end: document.getElementById("prodEndTime").value,
-      quantity: Number(document.getElementById("prodQuantity").value) || 0,
-      remainingTime:
-        document.getElementById("prodRemainingTimeDisplay").textContent || "-",
-      arret: Number(document.getElementById("prodArretMinutes").value) || 0,
-      cadence:
-        Number(document.getElementById("prodCadenceManual").value) ||
-        computeCadenceFromInputs() ||
-        null,
-      comment: document.getElementById("prodComment").value || "",
-      article: document.getElementById("prodCodeArticle").value || "",
-    };
+      // → rec complet
+      const rec = {
+        dateTime: formatDateTime(now),
+        equipe,
+        start: document.getElementById(\"prodStartTime\")?.value || \"\",
+        end: document.getElementById(\"prodEndTime\")?.value || \"\",
+        quantity: Number(document.getElementById(\"prodQuantity\")?.value) || 0,
+        remainingTime:
+          document.getElementById(\"prodRemainingTimeDisplay\")?.textContent || \"-\",
+        arret: Number(document.getElementById(\"prodArretMinutes\")?.value) || 0,
+        cadence:
+          Number(document.getElementById(\"prodCadenceManual\")?.value) ||
+          computeCadenceFromInputs() ||
+          null,
+        comment: document.getElementById(\"prodComment\")?.value || \"\",
+        article: document.getElementById(\"prodCodeArticle\")?.value || \"\",
+      };
 
-    state.production[L].push(rec);
+      state.production[L].push(rec);
 
-    // effacer brouillon
-    state.formDraft[L] = {};
-    saveState();
+      // effacer brouillon
+      state.formDraft[L] = {};
+      saveState();
 
-    refreshProductionForm();
-    refreshProductionHistoryTable();
-    refreshAtelierView();
+      refreshProductionForm();
+      refreshProductionHistoryTable();
+      refreshAtelierView();
 
-    if (rec.arret > 0) {
-      openArretFromProduction(L, rec.arret);
-    }
-  });
+      if (rec.arret > 0) {
+        openArretFromProduction(L, rec.arret);
+      }
+    });
+  }
 
-  document.getElementById("prodUndoBtn").addEventListener("click", () => {
-    const arr = getCurrentLineRecords();
-    if (arr.length) arr.pop();
-    saveState();
-    refreshProductionHistoryTable();
-    refreshAtelierView();
-  });
+  const undoBtn = document.getElementById(\"prodUndoBtn\");
+  if (undoBtn) {
+    undoBtn.addEventListener(\"click\", () => {
+      const arr = getCurrentLineRecords();
+      if (arr.length) arr.pop();
+      saveState();
+      refreshProductionHistoryTable();
+      refreshAtelierView();
+    });
+  }
 }
 
 // === SCROLL HORIZONTAL PRODUCTION (fix) ===
@@ -498,11 +525,12 @@ function refreshProductionView() {
   refreshProductionForm();
   refreshProductionHistoryTable();
 
-  const table = document.getElementById("prodHistoryTable");
-  const wrapper = table.parentElement;
-
-  wrapper.style.overflowX = "auto"; // ← scroll latéral ACTIVÉ
+  const table = document.getElementById(\"prodHistoryTable\");
+  if (table && table.parentElement) {
+    table.parentElement.style.overflowX = \"auto\"; // ← scroll latéral ACTIVÉ
+  }
 }
+
 /********************************************
  *   PARTIE 3 / 4 – ARRETS + ORGANISATION + PERSONNEL
  ********************************************/
@@ -516,25 +544,25 @@ function updateArretControlsForLine() {
 
   // Sous-zones pour Râpé
   if (arretSousZoneRowEl && arretSousZoneEl) {
-    if (line === "Râpé") {
-      arretSousZoneRowEl.style.display = "";
-      arretSousZoneEl.innerHTML = "";
-      ARRET_SUBLINES["Râpé"].forEach(s => {
-        const opt = document.createElement("option");
+    if (line === \"Râpé\") {
+      arretSousZoneRowEl.style.display = \"\";
+      arretSousZoneEl.innerHTML = \"\";
+      ARRET_SUBLINES[\"Râpé\"].forEach(s => {
+        const opt = document.createElement(\"option\");
         opt.value = s;
         opt.textContent = s;
         arretSousZoneEl.appendChild(opt);
       });
     } else {
-      arretSousZoneRowEl.style.display = "none";
-      arretSousZoneEl.innerHTML = "";
+      arretSousZoneRowEl.style.display = \"none\";
+      arretSousZoneEl.innerHTML = \"\";
     }
   }
 
   // Machines
-  arretMachineEl.innerHTML = "";
-  (ARRET_MACHINES[line] || ["Autre"]).forEach(m => {
-    const opt = document.createElement("option");
+  arretMachineEl.innerHTML = \"\";
+  (ARRET_MACHINES[line] || [\"Autre\"]).forEach(m => {
+    const opt = document.createElement(\"option\");
     opt.value = m;
     opt.textContent = m;
     arretMachineEl.appendChild(opt);
@@ -544,90 +572,107 @@ function updateArretControlsForLine() {
 // === ARRETS INIT ===
 
 function initArretsForm() {
-  arretLineEl = document.getElementById("arretLine");
-  arretSousZoneEl = document.getElementById("arretSousZone");
-  arretMachineEl = document.getElementById("arretMachine");
-  arretSousZoneRowEl = arretSousZoneEl.closest(".form-row");
+  arretLineEl = document.getElementById(\"arretLine\");
+  arretSousZoneEl = document.getElementById(\"arretSousZone\");
+  arretMachineEl = document.getElementById(\"arretMachine\");
+  
+  if (!arretLineEl || !arretSousZoneEl || !arretMachineEl) return;
+  
+  arretSousZoneRowEl = arretSousZoneEl.closest(\".form-row\");
 
   // Lignes dans la liste
-  arretLineEl.innerHTML = "";
+  arretLineEl.innerHTML = \"\";
   LINES.forEach(l => {
-    const opt = document.createElement("option");
+    const opt = document.createElement(\"option\");
     opt.value = l;
     opt.textContent = l;
     arretLineEl.appendChild(opt);
   });
 
-  arretLineEl.addEventListener("change", updateArretControlsForLine);
+  arretLineEl.addEventListener(\"change\", updateArretControlsForLine);
   updateArretControlsForLine();
 
   // Enregistrer un arrêt
-  document.getElementById("arretSaveBtn").addEventListener("click", () => {
-    const now = getNow();
+  const saveBtn = document.getElementById(\"arretSaveBtn\");
+  if (saveBtn) {
+    saveBtn.addEventListener(\"click\", () => {
+      const now = getNow();
 
-    const rec = {
-      dateTime: formatDateTime(now),
-      line: arretLineEl.value,
-      sousLigne:
-        arretSousZoneRowEl.style.display !== "none"
-          ? arretSousZoneEl.value
-          : "",
-      machine: arretMachineEl.value,
-      duration: Number(document.getElementById("arretDuration").value) || 0,
-      comment: document.getElementById("arretComment").value || "",
-      article: document.getElementById("arretArticle").value || "",
-    };
+      const rec = {
+        dateTime: formatDateTime(now),
+        line: arretLineEl.value,
+        sousLigne:
+          arretSousZoneRowEl && arretSousZoneRowEl.style.display !== \"none\"
+            ? arretSousZoneEl.value
+            : \"\",
+        machine: arretMachineEl.value,
+        duration: Number(document.getElementById(\"arretDuration\")?.value) || 0,
+        comment: document.getElementById(\"arretComment\")?.value || \"\",
+        article: document.getElementById(\"arretArticle\")?.value || \"\",
+      };
 
-    state.arrets.push(rec);
-    saveState();
+      state.arrets.push(rec);
+      saveState();
 
-    document.getElementById("arretDuration").value = "";
-    document.getElementById("arretComment").value = "";
-    document.getElementById("arretArticle").value = "";
+      const durationEl = document.getElementById(\"arretDuration\");
+      const commentEl = document.getElementById(\"arretComment\");
+      const articleEl = document.getElementById(\"arretArticle\");
+      
+      if (durationEl) durationEl.value = \"\";
+      if (commentEl) commentEl.value = \"\";
+      if (articleEl) articleEl.value = \"\";
 
-    refreshArretsView();
-    refreshAtelierView();
-  });
+      refreshArretsView();
+      refreshAtelierView();
+    });
+  }
 }
 
 // === OUVERTURE PAGE ARRÊT depuis Production ===
 
 function openArretFromProduction(line, duration) {
-  arretLineEl.value = line;
-  updateArretControlsForLine();
-  document.getElementById("arretDuration").value = duration || "";
-  showSection("arrets");
+  if (arretLineEl) {
+    arretLineEl.value = line;
+    updateArretControlsForLine();
+  }
+  
+  const durationEl = document.getElementById(\"arretDuration\");
+  if (durationEl) durationEl.value = duration || \"\";
+  
+  showSection(\"arrets\");
 }
 
 // === TABLEAU HISTORIQUE DES ARRÊTS ===
 
 function refreshArretsView() {
-  const tbody = document
-    .getElementById("arretsHistoryTable")
-    .querySelector("tbody");
+  const table = document.getElementById(\"arretsHistoryTable\");
+  if (!table) return;
+  
+  const tbody = table.querySelector(\"tbody\");
+  if (!tbody) return;
 
-  tbody.innerHTML = "";
+  tbody.innerHTML = \"\";
 
   state.arrets.forEach((rec, idx) => {
-    const tr = document.createElement("tr");
+    const tr = document.createElement(\"tr\");
 
     tr.innerHTML = `
       <td>${rec.dateTime}</td>
       <td>${rec.line}</td>
-      <td>${rec.sousLigne || "-"}</td>
+      <td>${rec.sousLigne || \"-\"}</td>
       <td>${rec.machine}</td>
-      <td>${rec.article || ""}</td>
+      <td>${rec.article || \"\"}</td>
       <td>${rec.duration}</td>
-      <td>${rec.comment || ""}</td>
-      <td><button class="secondary-btn" data-idx="${idx}">✕</button></td>
+      <td>${rec.comment || \"\"}</td>
+      <td><button class=\"secondary-btn\" data-idx=\"${idx}\">✕</button></td>
     `;
 
     tbody.appendChild(tr);
   });
 
   // Suppressions
-  tbody.querySelectorAll("button[data-idx]").forEach(btn => {
-    btn.addEventListener("click", () => {
+  tbody.querySelectorAll(\"button[data-idx]\").forEach(btn => {
+    btn.addEventListener(\"click\", () => {
       const i = Number(btn.dataset.idx);
       state.arrets.splice(i, 1);
       saveState();
@@ -640,35 +685,44 @@ function refreshArretsView() {
 // === ORGANISATION ===
 
 function bindOrganisationForm() {
-  document.getElementById("orgSaveBtn").addEventListener("click", () => {
+  const saveBtn = document.getElementById(\"orgSaveBtn\");
+  if (!saveBtn) return;
+
+  saveBtn.addEventListener(\"click\", () => {
     const now = getNow();
 
     const rec = {
       dateTime: formatDateTime(now),
       equipe: state.currentEquipe,
-      consigne: document.getElementById("orgConsigne").value || "",
-      visa: document.getElementById("orgVisa").value || "",
+      consigne: document.getElementById(\"orgConsigne\")?.value || \"\",
+      visa: document.getElementById(\"orgVisa\")?.value || \"\",
       valide: false,
     };
 
     state.organisation.push(rec);
     saveState();
 
-    document.getElementById("orgConsigne").value = "";
-    document.getElementById("orgVisa").value = "";
+    const consigneEl = document.getElementById(\"orgConsigne\");
+    const visaEl = document.getElementById(\"orgVisa\");
+    
+    if (consigneEl) consigneEl.value = \"\";
+    if (visaEl) visaEl.value = \"\";
 
     refreshOrganisationView();
   });
 }
 
 function refreshOrganisationView() {
-  const tbody = document
-    .getElementById("orgHistoryTable")
-    .querySelector("tbody");
-  tbody.innerHTML = "";
+  const table = document.getElementById(\"orgHistoryTable\");
+  if (!table) return;
+  
+  const tbody = table.querySelector(\"tbody\");
+  if (!tbody) return;
+  
+  tbody.innerHTML = \"\";
 
   state.organisation.forEach((rec, idx) => {
-    const tr = document.createElement("tr");
+    const tr = document.createElement(\"tr\");
 
     tr.innerHTML = `
       <td>${rec.dateTime}</td>
@@ -676,8 +730,8 @@ function refreshOrganisationView() {
       <td>${rec.consigne}</td>
       <td>${rec.visa}</td>
       <td>
-        <button class="secondary-btn" data-idx="${idx}">
-          ${rec.valide ? "✅" : "❌"}
+        <button class=\"secondary-btn\" data-idx=\"${idx}\">
+          ${rec.valide ? \"✅\" : \"❌\"}
         </button>
       </td>
     `;
@@ -685,11 +739,10 @@ function refreshOrganisationView() {
     tbody.appendChild(tr);
   });
 
-  tbody.querySelectorAll("button[data-idx]").forEach(btn => {
-    btn.addEventListener("click", () => {
+  tbody.querySelectorAll(\"button[data-idx]\").forEach(btn => {
+    btn.addEventListener(\"click\", () => {
       const i = Number(btn.dataset.idx);
-      state.organisation[i].valide =
-        !state.organisation[i].valide;
+      state.organisation[i].valide = !state.organisation[i].valide;
       saveState();
       refreshOrganisationView();
     });
@@ -699,36 +752,46 @@ function refreshOrganisationView() {
 // === PERSONNEL ===
 
 function bindPersonnelForm() {
-  document.getElementById("persSaveBtn").addEventListener("click", () => {
+  const saveBtn = document.getElementById(\"persSaveBtn\");
+  if (!saveBtn) return;
+
+  saveBtn.addEventListener(\"click\", () => {
     const now = getNow();
 
     const rec = {
       dateTime: formatDateTime(now),
       equipe: state.currentEquipe,
-      nom: document.getElementById("persNom").value || "",
-      motif: document.getElementById("persMotif").value || "",
-      comment: document.getElementById("persComment").value || "",
+      nom: document.getElementById(\"persNom\")?.value || \"\",
+      motif: document.getElementById(\"persMotif\")?.value || \"\",
+      comment: document.getElementById(\"persComment\")?.value || \"\",
     };
 
     state.personnel.push(rec);
     saveState();
 
-    document.getElementById("persNom").value = "";
-    document.getElementById("persMotif").value = "";
-    document.getElementById("persComment").value = "";
+    const nomEl = document.getElementById(\"persNom\");
+    const motifEl = document.getElementById(\"persMotif\");
+    const commentEl = document.getElementById(\"persComment\");
+    
+    if (nomEl) nomEl.value = \"\";
+    if (motifEl) motifEl.value = \"\";
+    if (commentEl) commentEl.value = \"\";
 
     refreshPersonnelView();
   });
 }
 
 function refreshPersonnelView() {
-  const tbody = document
-    .getElementById("persHistoryTable")
-    .querySelector("tbody");
-  tbody.innerHTML = "";
+  const table = document.getElementById(\"persHistoryTable\");
+  if (!table) return;
+  
+  const tbody = table.querySelector(\"tbody\");
+  if (!tbody) return;
+  
+  tbody.innerHTML = \"\";
 
   state.personnel.forEach(rec => {
-    const tr = document.createElement("tr");
+    const tr = document.createElement(\"tr\");
 
     tr.innerHTML = `
       <td>${rec.dateTime}</td>
@@ -747,9 +810,10 @@ function refreshPersonnelView() {
  ********************************************/
 
 function refreshAtelierView() {
-  const container = document.getElementById("atelier-lines-summary");
+  const container = document.getElementById(\"atelier-lines-summary\");
   if (!container) return;
-  container.innerHTML = "";
+  
+  container.innerHTML = \"\";
 
   // cartes lignes
   LINES.forEach(line => {
@@ -763,44 +827,48 @@ function refreshAtelierView() {
       : 0;
 
     const arts = new Set(recs.map(r => r.article).filter(a => a));
-    const artStr = arts.size ? [...arts].join(", ") : "-";
+    const artStr = arts.size ? [...arts].join(\", \") : \"-\";
 
-    const div = document.createElement("div");
-    div.className = "summary-card";
+    const div = document.createElement(\"div\");
+    div.className = \"summary-card\";
 
     div.innerHTML = `
-      <div class="summary-card-title">${line}</div>
-      <div class="summary-main">${total} colis</div>
-      <div class="summary-sub">Articles : ${artStr}</div>
-      <div class="summary-sub">Cadence moy. ${avg ? avg.toFixed(1) : "-"} h</div>
+      <div class=\"summary-card-title\">${line}</div>
+      <div class=\"summary-main\">${total} colis</div>
+      <div class=\"summary-sub\">Articles : ${artStr}</div>
+      <div class=\"summary-sub\">Cadence moy. ${avg ? avg.toFixed(1) : \"-\"} h</div>
     `;
 
     container.appendChild(div);
   });
 
   // Arrêts majeurs
-  const tbody = document
-    .getElementById("atelier-arrets-table")
-    .querySelector("tbody");
-  tbody.innerHTML = "";
+  const table = document.getElementById(\"atelier-arrets-table\");
+  if (!table) return;
+  
+  const tbody = table.querySelector(\"tbody\");
+  if (!tbody) return;
+  
+  tbody.innerHTML = \"\";
 
   [...state.arrets]
     .sort((a, b) => (b.duration || 0) - (a.duration || 0))
     .forEach(rec => {
-      const tr = document.createElement("tr");
+      const tr = document.createElement(\"tr\");
       tr.innerHTML = `
         <td>${rec.line}</td>
-        <td>${rec.sousLigne || "-"}</td>
+        <td>${rec.sousLigne || \"-\"}</td>
         <td>${rec.machine}</td>
         <td>${rec.duration}</td>
-        <td>${rec.comment || ""}</td>
+        <td>${rec.comment || \"\"}</td>
       `;
       tbody.appendChild(tr);
     });
 
   // scroll horizontal ATELIER (pour les arrêts)
-  const table = document.getElementById("atelier-arrets-table");
-  table.parentElement.style.overflowX = "auto";
+  if (table.parentElement) {
+    table.parentElement.style.overflowX = \"auto\";
+  }
 }
 
 /********************************************
@@ -810,21 +878,31 @@ function refreshAtelierView() {
 let historyChart = null;
 
 function initHistoriqueEquipes() {
-  const select = document.getElementById("historySelect");
+  const select = document.getElementById(\"historySelect\");
+  if (!select) return;
+  
   refreshHistorySelect();
 
-  select.addEventListener("change", () => {
-    if (select.value === "") clearHistoryView();
-    else refreshHistoryView(archives[Number(select.value)]);
+  select.addEventListener(\"change\", () => {
+    if (select.value === \"\") {
+      clearHistoryView();
+    } else {
+      const idx = Number(select.value);
+      if (archives[idx]) {
+        refreshHistoryView(archives[idx]);
+      }
+    }
   });
 }
 
 function refreshHistorySelect() {
-  const select = document.getElementById("historySelect");
-  select.innerHTML = `<option value="">-- Sélectionner --</option>`;
+  const select = document.getElementById(\"historySelect\");
+  if (!select) return;
+  
+  select.innerHTML = `<option value=\"\">-- Sélectionner --</option>`;
 
   archives.forEach((snap, idx) => {
-    const opt = document.createElement("option");
+    const opt = document.createElement(\"option\");
     opt.value = idx;
     opt.textContent = snap.label;
     select.appendChild(opt);
@@ -832,43 +910,137 @@ function refreshHistorySelect() {
 }
 
 function clearHistoryView() {
-  document.getElementById("history-lines-summary").innerHTML = "";
-  document
-    .getElementById("history-arrets-table")
-    .querySelector("tbody").innerHTML = "";
+  const summaryEl = document.getElementById(\"history-lines-summary\");
+  if (summaryEl) summaryEl.innerHTML = \"\";
+
+  const table = document.getElementById(\"history-arrets-table\");
+  if (table) {
+    const tbody = table.querySelector(\"tbody\");
+    if (tbody) tbody.innerHTML = \"\";
+  }
 
   if (historyChart) {
     historyChart.destroy();
     historyChart = null;
   }
 }
+
+// ✅ FONCTION MANQUANTE AJOUTÉE
+function refreshHistoryView(snapshot) {
+  if (!snapshot || !snapshot.state) return;
+
+  const savedState = snapshot.state;
+
+  // Afficher les lignes de production
+  const summaryEl = document.getElementById(\"history-lines-summary\");
+  if (summaryEl) {
+    summaryEl.innerHTML = \"\";
+
+    LINES.forEach(line => {
+      const recs = savedState.production[line] || [];
+      const total = recs.reduce((s, r) => s + (r.quantity || 0), 0);
+      const cad = recs.map(r => r.cadence).filter(c => c && c > 0);
+      const avg = cad.length ? cad.reduce((s, c) => s + c) / cad.length : 0;
+
+      const div = document.createElement(\"div\");
+      div.className = \"summary-card\";
+      div.innerHTML = `
+        <div class=\"summary-card-title\">${line}</div>
+        <div class=\"summary-main\">${total} colis</div>
+        <div class=\"summary-sub\">Cadence moy. ${avg ? avg.toFixed(1) : \"-\"} h</div>
+      `;
+      summaryEl.appendChild(div);
+    });
+  }
+
+  // Afficher les arrêts
+  const table = document.getElementById(\"history-arrets-table\");
+  if (table) {
+    const tbody = table.querySelector(\"tbody\");
+    if (tbody) {
+      tbody.innerHTML = \"\";
+
+      (savedState.arrets || []).forEach(rec => {
+        const tr = document.createElement(\"tr\");
+        tr.innerHTML = `
+          <td>${rec.line}</td>
+          <td>${rec.sousLigne || \"-\"}</td>
+          <td>${rec.machine}</td>
+          <td>${rec.duration}</td>
+          <td>${rec.comment || \"\"}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+  }
+
+  // Graphique Chart.js (si disponible)
+  const chartCanvas = document.getElementById(\"historyChart\");
+  if (chartCanvas && typeof Chart !== 'undefined') {
+    if (historyChart) historyChart.destroy();
+
+    const labels = LINES;
+    const data = LINES.map(line => {
+      const recs = savedState.production[line] || [];
+      return recs.reduce((s, r) => s + (r.quantity || 0), 0);
+    });
+
+    historyChart = new Chart(chartCanvas, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Production (colis)',
+          data: data,
+          backgroundColor: 'rgba(54, 162, 235, 0.6)',
+          borderColor: 'rgba(54, 162, 235, 1)',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    });
+  }
+}
+
 /********************************************
  *   PARTIE 4 / 4 – EXPORT GLOBAL (1 SEUL ONGLET)
  ********************************************/
 
 function exportStateToExcel(srcState, filename) {
+  // Vérifier que la bibliothèque XLSX est chargée
+  if (typeof XLSX === 'undefined') {
+    alert(\"Bibliothèque XLSX non chargée. Impossible d'exporter.\");
+    console.error(\"XLSX library not found. Please include SheetJS library.\");
+    return;
+  }
+
   const wb = XLSX.utils.book_new();
 
-  // === UN SEUL ONGLETS ===
+  // === UN SEUL ONGLET ===
   const rows = [[
-    "Type",
-    "Date/Heure",
-    "Équipe",
-    "Ligne",
-    "Sous-ligne",
-    "Machine",
-    "Début",
-    "Fin",
-    "Qté",
-    "Arrêt (min)",
-    "Cadence",
-    "Temps restant",
-    "Commentaire",
-    "Article",
-    "Nom personnel",
-    "Motif personnel",
-    "Visa organisation",
-    "Validée organisation"
+    \"Type\",
+    \"Date/Heure\",
+    \"Équipe\",
+    \"Ligne\",
+    \"Sous-ligne\",
+    \"Machine\",
+    \"Début\",
+    \"Fin\",
+    \"Qté\",
+    \"Arrêt (min)\",
+    \"Cadence\",
+    \"Temps restant\",
+    \"Commentaire\",
+    \"Article\",
+    \"Nom personnel\",
+    \"Motif personnel\",
+    \"Visa organisation\",
+    \"Validée organisation\"
   ]];
 
   // === PRODUCTION ===
@@ -876,24 +1048,24 @@ function exportStateToExcel(srcState, filename) {
     const recs = srcState.production[line] || [];
     recs.forEach(r => {
       rows.push([
-        "PRODUCTION",
+        \"PRODUCTION\",
         r.dateTime,
         r.equipe,
         line,
-        "",
-        "",
-        r.start || "",
-        r.end || "",
-        r.quantity || "",
-        r.arret || "",
-        r.cadence || "",
-        r.remainingTime || "",
-        r.comment || "",
-        r.article || "",
-        "",
-        "",
-        "",
-        ""
+        \"\",
+        \"\",
+        r.start || \"\",
+        r.end || \"\",
+        r.quantity || \"\",
+        r.arret || \"\",
+        r.cadence || \"\",
+        r.remainingTime || \"\",
+        r.comment || \"\",
+        r.article || \"\",
+        \"\",
+        \"\",
+        \"\",
+        \"\"
       ]);
     });
   });
@@ -901,87 +1073,90 @@ function exportStateToExcel(srcState, filename) {
   // === ARRETS ===
   srcState.arrets.forEach(r => {
     rows.push([
-      "ARRET",
+      \"ARRET\",
       r.dateTime,
-      "",
+      \"\",
       r.line,
-      r.sousLigne || "",
-      r.machine || "",
-      "",
-      "",
-      "",
-      r.duration || "",
-      "",
-      "",
-      r.comment || "",
-      r.article || "",
-      "",
-      "",
-      "",
-      ""
+      r.sousLigne || \"\",
+      r.machine || \"\",
+      \"\",
+      \"\",
+      \"\",
+      r.duration || \"\",
+      \"\",
+      \"\",
+      r.comment || \"\",
+      r.article || \"\",
+      \"\",
+      \"\",
+      \"\",
+      \"\"
     ]);
   });
 
   // === ORGANISATION ===
   srcState.organisation.forEach(r => {
     rows.push([
-      "ORGANISATION",
+      \"ORGANISATION\",
       r.dateTime,
       r.equipe,
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      r.consigne || "",
-      "",
-      "",
-      r.visa || "",
-      r.valide ? "Oui" : "Non"
+      \"\",
+      \"\",
+      \"\",
+      \"\",
+      \"\",
+      \"\",
+      \"\",
+      \"\",
+      \"\",
+      r.consigne || \"\",
+      \"\",
+      \"\",
+      \"\",
+      r.visa || \"\",
+      r.valide ? \"Oui\" : \"Non\"
     ]);
   });
 
   // === PERSONNEL ===
   srcState.personnel.forEach(r => {
     rows.push([
-      "PERSONNEL",
+      \"PERSONNEL\",
       r.dateTime,
       r.equipe,
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      r.comment || "",
-      "",
-      r.nom || "",
-      r.motif || "",
-      "",
-      ""
+      \"\",
+      \"\",
+      \"\",
+      \"\",
+      \"\",
+      \"\",
+      \"\",
+      \"\",
+      \"\",
+      r.comment || \"\",
+      \"\",
+      r.nom || \"\",
+      r.motif || \"\",
+      \"\",
+      \"\"
     ]);
   });
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  XLSX.utils.book_append_sheet(wb, ws, "GLOBAL");
+  XLSX.utils.book_append_sheet(wb, ws, \"GLOBAL\");
   XLSX.writeFile(wb, filename);
 }
 
 // === BIND EXPORT ===
 function bindExportGlobal() {
-  const btn = document.getElementById("exportGlobalBtn");
-  btn.addEventListener("click", () => {
+  const btn = document.getElementById(\"exportGlobalBtn\");
+  if (!btn) return;
+
+  btn.addEventListener(\"click\", () => {
     const now = getNow();
-    const hh = String(now.getHours()).padStart(2, "0");
-    const mm = String(now.getMinutes()).padStart(2, "0");
-    const ss = String(now.getSeconds()).padStart(2, "0");
+    const hh = String(now.getHours()).padStart(2, \"0\");
+    const mm = String(now.getMinutes()).padStart(2, \"0\");
+    const ss = String(now.getSeconds()).padStart(2, \"0\");
 
     const filename = `Atelier_PPNC_${hh}h${mm}_${ss}.xlsx`;
     exportStateToExcel(state, filename);
@@ -993,26 +1168,28 @@ function bindExportGlobal() {
  ********************************************/
 
 function bindRAZEquipe() {
-  const btn = document.getElementById("razBtn");
-  btn.addEventListener("click", () => {
-    if (!confirm("RAZ + changement d'équipe + export ?")) return;
+  const btn = document.getElementById(\"razBtn\");
+  if (!btn) return;
+
+  btn.addEventListener(\"click\", () => {
+    if (!confirm(\"RAZ + changement d'équipe + export ?\")) return;
 
     const now = getNow();
     const week = getWeekNumber(now);
     const quantieme = getQuantieme(now);
-    const hh = String(now.getHours()).padStart(2, "0");
-    const mm = String(now.getMinutes()).padStart(2, "0");
+    const hh = String(now.getHours()).padStart(2, \"0\");
+    const mm = String(now.getMinutes()).padStart(2, \"0\");
 
     // Choisir équipe finissante
     let finished = prompt(
-      "Quelle équipe vient de finir ? (M, AM, N)",
+      \"Quelle équipe vient de finir ? (M, AM, N)\",
       state.currentEquipe
     );
     if (!finished) return;
     finished = finished.toUpperCase().trim();
 
-    if (!["M", "AM", "N"].includes(finished)) {
-      alert("Équipe invalide.");
+    if (![\"M\", \"AM\", \"N\"].includes(finished)) {
+      alert(\"Équipe invalide.\");
       return;
     }
 
@@ -1037,10 +1214,10 @@ function bindRAZEquipe() {
     exportStateToExcel(snap.state, filename);
 
     // Calcul équipe suivante
-    let next = "M";
-    if (finished === "M") next = "AM";
-    else if (finished === "AM") next = "N";
-    else next = "M";
+    let next = \"M\";
+    if (finished === \"M\") next = \"AM\";
+    else if (finished === \"AM\") next = \"N\";
+    else next = \"M\";
 
     state.currentEquipe = next;
 
@@ -1063,39 +1240,54 @@ function bindRAZEquipe() {
 
     alert(`RAZ OK. Nouvelle équipe active : ${next}`);
   });
+} // ✅ ACCOLADE FERMANTE AJOUTÉE
 
 // === THÈME CLAIR / SOMBRE ===  
 
 function initTheme() {
-  const btn = document.getElementById("themeToggleBtn");
+  const btn = document.getElementById(\"themeToggleBtn\");
   if (!btn) return;
 
   // Charger le thème sauvegardé
-  const saved = localStorage.getItem("themeMode");
-  if (saved === "light") {
-    document.body.classList.add("light-mode");
+  const saved = localStorage.getItem(\"themeMode\");
+  if (saved === \"light\") {
+    document.body.classList.add(\"light-mode\");
   }
 
   // Toggle du thème
-  btn.addEventListener("click", () => {
-    document.body.classList.toggle("light-mode");
+  btn.addEventListener(\"click\", () => {
+    document.body.classList.toggle(\"light-mode\");
 
-    if (document.body.classList.contains("light-mode")) {
-      localStorage.setItem("themeMode", "light");
+    if (document.body.classList.contains(\"light-mode\")) {
+      localStorage.setItem(\"themeMode\", \"light\");
     } else {
-      localStorage.setItem("themeMode", "dark");
+      localStorage.setItem(\"themeMode\", \"dark\");
     }
   });
+}
+
+// ✅ FONCTIONS MANQUANTES AJOUTÉES (stubs basiques)
+
+function initCalculator() {
+  // Fonction pour initialiser une calculatrice (si nécessaire)
+  // Ajoutez votre logique ici si cette fonctionnalité existe
+  console.log(\"Calculator initialized (stub)\");
+}
+
+function bindDDM() {
+  // Fonction pour gérer les DDM (Date de Durabilité Minimale?)
+  // Ajoutez votre logique ici si cette fonctionnalité existe
+  console.log(\"DDM binding initialized (stub)\");
 }
 
 // === INIT GLOBALE / ORIENTATION ===
 
 function updateOrientationLayout() {
   const isLandscape = window.innerWidth > window.innerHeight;
-  document.body.classList.toggle("is-landscape", isLandscape);
+  document.body.classList.toggle(\"is-landscape\", isLandscape);
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener(\"DOMContentLoaded\", () => {
   loadState();
   loadArchives();
   initHeaderDate();
@@ -1106,16 +1298,17 @@ document.addEventListener("DOMContentLoaded", () => {
   bindOrganisationForm();
   bindPersonnelForm();
   bindExportGlobal();
-  initCalculator();
-  bindDDM();
+  initCalculator(); // ✅ Fonction ajoutée
+  bindDDM(); // ✅ Fonction ajoutée
   bindRAZEquipe();
   initHistoriqueEquipes();
   initTheme();
 
   // Layout en fonction de l'orientation réelle du téléphone
   updateOrientationLayout();
-  window.addEventListener("resize", updateOrientationLayout);
-  window.addEventListener("orientationchange", updateOrientationLayout);
+  window.addEventListener(\"resize\", updateOrientationLayout);
+  window.addEventListener(\"orientationchange\", updateOrientationLayout);
 
-  showSection(state.currentSection || "atelier");
+  showSection(state.currentSection || \"atelier\");
 });
+"
