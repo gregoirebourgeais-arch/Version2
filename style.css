@@ -534,10 +534,38 @@ textarea {
   box-shadow: 0 2px 8px rgba(255, 68, 82, 0.3);
 }
 
+/* EQUIPE SELECTOR */
+
+.equipe-selector {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.05);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: 0.25s;
+  font-weight: 600;
+}
+
+.equipe-selector:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+body.light-mode .equipe-selector {
+  border: 1px solid #9bb8e5;
+  background: rgba(255, 255, 255, 0.6);
+  color: #102a43;
+}
+
+body.light-mode .equipe-selector:hover {
+  background: #fff;
+}
+
 /* THEME TOGGLE */
 
 .theme-toggle {
-  margin-left: 12px;
   padding: 6px 12px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -569,6 +597,7 @@ textarea {
   font-size: 1.1rem;
 }
 
+/* CALCULATRICE */
 /* CALCULATRICE */
 
 .calculator-toggle {
@@ -1046,5 +1075,4 @@ body.is-landscape {
     left: 12px;
   }
 }
-
 
