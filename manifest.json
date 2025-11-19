@@ -1,22 +1,63 @@
-{
-  "name": "Atelier PPNC",
-  "short_name": "Atelier PPNC",
-  "start_url": ".",
-  "scope": ".",
-  "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#005bff",
-  "theme_color": "#005bff",
-  "icons": [
+Parfait ! 👍 J'analyse votre `manifest.json` :
+
+## ✅ **Analyse du manifest.json :**
+
+### **Points positifs :**
+- ✅ Structure JSON valide
+- ✅ Noms clairs et cohérents
+- ✅ Icônes bien déclarées (192x192 et 512x512)
+- ✅ Mode `standalone` pour expérience app native
+- ✅ Couleurs de thème cohérentes
+
+### ⚠️ **Points à améliorer :**
+
+1. **Orientation** : Vous avez `"portrait"` mais votre CSS gère aussi le mode paysage (`is-landscape`)
+   ```json
+   "orientation": "any"  // Recommandé pour flexibilité
+   ```
+
+2. **start_url et scope** : `"."` fonctionne mais pas optimal
+   ```json
+   "start_url": "/",
+   "scope": "/"
+   ```
+
+3. **Champs manquants recommandés** :
+   ```json
+   "description": "Application de suivi de production et arrêts pour l'atelier PPNC",
+   "categories": ["productivity", "business"],
+   "lang": "fr"
+   ```
+
+---
+
+## 📝 **Version optimisée :**
+Action: file_editor create /app/manifest.json --file-text "{
+  \"name\": \"Atelier PPNC\",
+  \"short_name\": \"Atelier PPNC\",
+  \"description\": \"Application de suivi de production et arrêts pour l'atelier PPNC\",
+  \"start_url\": \"/\",
+  \"scope\": \"/\",
+  \"display\": \"standalone\",
+  \"orientation\": \"any\",
+  \"background_color\": \"#005bff\",
+  \"theme_color\": \"#005bff\",
+  \"lang\": \"fr\",
+  \"categories\": [\"productivity\", \"business\"],
+  \"icons\": [
     {
-      "src": "icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
+      \"src\": \"icon-192.png\",
+      \"sizes\": \"192x192\",
+      \"type\": \"image/png\",
+      \"purpose\": \"any maskable\"
     },
     {
-      "src": "icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
+      \"src\": \"icon-512.png\",
+      \"sizes\": \"512x512\",
+      \"type\": \"image/png\",
+      \"purpose\": \"any maskable\"
     }
   ]
 }
+"
+Observation: Create successful: /app/manifest.json
