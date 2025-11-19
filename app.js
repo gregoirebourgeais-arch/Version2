@@ -222,11 +222,47 @@ function initHeaderDate() {
 
     el.textContent =
       `Quantième ${q} • ${d}/${m}/${now.getFullYear()} • ` +
-      `S${week} • ${hh}:${mm} • Équipe ${state.currentEquipe}`;
+      `S${week} • ${hh}:${mm}`;
   }
 
   update();
   setInterval(update, 30000);
+}
+
+function initEquipeSelector() {
+  const selector = document.getElementById("equipeSelector");
+  if (!selector) return;
+
+  // Initialiser avec l'équipe actuelle
+  selector.value = state.currentEquipe;
+
+  // Écouter les changements
+  selector.addEventListener("change", () => {
+    state.currentEquipe = selector.value;
+    saveState();
+    
+    // Confirmation visuelle
+    const btn = document.createElement("div");
+    btn.textContent = `✓ Équipe ${selector.value} activée`;
+    btn.style.cssText = `
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      background: #62d38b;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      z-index: 9999;
+      animation: fadeIn 0.3s ease-out;
+    `;
+    document.body.appendChild(btn);
+    
+    setTimeout(() => {
+      btn.style.opacity = "0";
+      btn.style.transition = "opacity 0.3s";
+      setTimeout(() => btn.remove(), 300);
+    }, 2000);
+  });
 }
 
 /********************************************
@@ -912,6 +948,7 @@ function refreshAtelierView() {
   const table = document.getElementById("atelier-arrets-table");
   if (!table) return;
   
+  
   const tbody = table.querySelector("tbody");
   if (!tbody) return;
   
@@ -1074,6 +1111,52 @@ function refreshHistoryView(snapshot) {
       }
     });
   }
+
+  // ✅ AFFICHER ORGANISATION
+  const orgContainer = document.getElementById("history-organisation");
+  if (orgContainer && savedState.organisation && savedState.organisation.length > 0) {
+    orgContainer.style.display = "block";
+    const orgTable = orgContainer.querySelector("tbody");
+    if (orgTable) {
+      orgTable.innerHTML = "";
+      savedState.organisation.forEach(r => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${r.dateTime}</td>
+          <td>${r.equipe}</td>
+          <td>${r.consigne}</td>
+          <td>${r.visa}</td>
+          <td>${r.valide ? "✅" : "❌"}</td>
+        `;
+        orgTable.appendChild(tr);
+      });
+    }
+  } else if (orgContainer) {
+    orgContainer.style.display = "none";
+  }
+
+  // ✅ AFFICHER PERSONNEL
+  const persContainer = document.getElementById("history-personnel");
+  if (persContainer && savedState.personnel && savedState.personnel.length > 0) {
+    persContainer.style.display = "block";
+    const persTable = persContainer.querySelector("tbody");
+    if (persTable) {
+      persTable.innerHTML = "";
+      savedState.personnel.forEach(r => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${r.dateTime}</td>
+          <td>${r.equipe}</td>
+          <td>${r.nom}</td>
+          <td>${r.motif}</td>
+          <td>${r.comment}</td>
+        `;
+        persTable.appendChild(tr);
+      });
+    }
+  } else if (persContainer) {
+    persContainer.style.display = "none";
+  }
 }
 
 /********************************************
@@ -1222,7 +1305,7 @@ function exportDataToExcel(srcState, filename) {
   XLSX.writeFile(wb, filename);
 }
 
-// ===== EXPORT 2 : PRÉSENTATION (Réunion) =====
+// ===== EXPORT 2 : PRÉSENTATION (Réunion) - VERSION AMÉLIORÉE =====
 function exportPresentationToExcel(srcState, filename) {
   if (typeof XLSX === 'undefined') {
     alert("Bibliothèque XLSX non chargée.");
@@ -1231,132 +1314,198 @@ function exportPresentationToExcel(srcState, filename) {
 
   const wb = XLSX.utils.book_new();
 
-  // ===== ONGLET 1 : SYNTHÈSE =====
+  // ===== ONGLET 1 : SYNTHÈSE EXÉCUTIVE =====
   const synthRows = [
-    ["RAPPORT DE PRODUCTION - ATELIER PPNC"],
+    ["📊 RAPPORT DE PRODUCTION - ATELIER PPNC"],
     [""],
-    ["Date d'export", new Date().toLocaleDateString("fr-FR")],
-    ["Équipe", srcState.currentEquipe],
+    ["📅 Date d'export", new Date().toLocaleDateString("fr-FR") + " à " + new Date().toLocaleTimeString("fr-FR")],
+    ["👥 Équipe", srcState.currentEquipe],
+    ["📍 Semaine", "S" + getWeekNumber(new Date())],
+    ["📍 Quantième", getQuantieme(new Date())],
     [""],
-    ["=== PRODUCTION PAR LIGNE ==="],
-    ["Ligne", "Quantité Totale", "Cadence Moyenne", "Articles"]
+    [""],
+    ["═══════════════════════════════════════════════════════════════"],
+    ["📦 PRODUCTION PAR LIGNE"],
+    ["═══════════════════════════════════════════════════════════════"],
+    [""],
+    ["Ligne", "Quantité Totale (colis)", "Cadence Moyenne (colis/h)", "Articles produits"]
   ];
 
+  let totalProduction = 0;
   LINES.forEach(line => {
     const recs = srcState.production[line] || [];
     const total = recs.reduce((s, r) => s + (r.quantity || 0), 0);
+    totalProduction += total;
     const cadences = recs.map(r => r.cadence).filter(c => c && c > 0);
-    const avgCad = cadences.length ? (cadences.reduce((s, c) => s + c, 0) / cadences.length).toFixed(2) : "-";
+    const avgCad = cadences.length ? (cadences.reduce((s, c) => s + c, 0) / cadences.length).toFixed(1) : "-";
     const articles = [...new Set(recs.map(r => r.article).filter(a => a))].join(", ") || "-";
     
     synthRows.push([line, total, avgCad, articles]);
   });
 
   synthRows.push([]);
-  synthRows.push(["=== ARRÊTS MAJEURS ==="]);
-  synthRows.push(["Ligne", "Machine", "Durée (min)", "Commentaire"]);
+  synthRows.push(["🎯 TOTAL PRODUCTION", totalProduction + " colis", "", ""]);
+  synthRows.push([]);
+  synthRows.push([]);
 
+  synthRows.push(["═══════════════════════════════════════════════════════════════"]);
+  synthRows.push(["⚠️ TOP 10 ARRÊTS MAJEURS"]);
+  synthRows.push(["═══════════════════════════════════════════════════════════════"]);
+  synthRows.push([]);
+  synthRows.push(["Ligne", "Sous-ligne", "Machine", "Durée (min)", "Commentaire"]);
+
+  const totalArrets = srcState.arrets.reduce((s, r) => s + (r.duration || 0), 0);
   [...srcState.arrets]
     .sort((a, b) => (b.duration || 0) - (a.duration || 0))
     .slice(0, 10)
     .forEach(r => {
-      synthRows.push([r.line, r.machine, r.duration, r.comment || ""]);
+      synthRows.push([r.line, r.sousLigne || "-", r.machine, r.duration, r.comment || ""]);
     });
+
+  synthRows.push([]);
+  synthRows.push(["⏱️ DURÉE TOTALE ARRÊTS", totalArrets + " minutes", "", "", ""]);
+  
+  // Statistiques Organisation & Personnel
+  if (srcState.organisation && srcState.organisation.length > 0) {
+    synthRows.push([]);
+    synthRows.push([]);
+    synthRows.push(["═══════════════════════════════════════════════════════════════"]);
+    synthRows.push(["📋 RÉSUMÉ ORGANISATION"]);
+    synthRows.push(["═══════════════════════════════════════════════════════════════"]);
+    synthRows.push([]);
+    synthRows.push(["Nombre de consignes", srcState.organisation.length]);
+    synthRows.push(["Consignes validées", srcState.organisation.filter(o => o.valide).length]);
+  }
+
+  if (srcState.personnel && srcState.personnel.length > 0) {
+    synthRows.push([]);
+    synthRows.push([]);
+    synthRows.push(["═══════════════════════════════════════════════════════════════"]);
+    synthRows.push(["👤 RÉSUMÉ PERSONNEL"]);
+    synthRows.push(["═══════════════════════════════════════════════════════════════"]);
+    synthRows.push([]);
+    synthRows.push(["Nombre d'événements", srcState.personnel.length]);
+    const motifs = {};
+    srcState.personnel.forEach(p => {
+      motifs[p.motif] = (motifs[p.motif] || 0) + 1;
+    });
+    Object.entries(motifs).forEach(([motif, count]) => {
+      synthRows.push([motif, count]);
+    });
+  }
 
   const wsSynth = XLSX.utils.aoa_to_sheet(synthRows);
   
-  // Styles pour le titre (gras, grande police)
-  if (!wsSynth['A1'].s) wsSynth['A1'].s = {};
-  wsSynth['A1'].s = { font: { bold: true, sz: 16 } };
-  
   wsSynth['!cols'] = [
-    { wch: 20 },
-    { wch: 20 },
+    { wch: 25 },
+    { wch: 25 },
+    { wch: 25 },
     { wch: 20 },
     { wch: 50 }
   ];
 
-  XLSX.utils.book_append_sheet(wb, wsSynth, "SYNTHÈSE");
+  XLSX.utils.book_append_sheet(wb, wsSynth, "📊 SYNTHÈSE");
 
-  // ===== ONGLET 2 : PRODUCTION DÉTAIL =====
+  // ===== ONGLET 2 : PRODUCTION DÉTAILLÉE =====
   const prodRows = [
-    ["PRODUCTION DÉTAILLÉE"],
+    ["📦 PRODUCTION DÉTAILLÉE PAR LIGNE"],
     [""],
-    ["Date/Heure", "Équipe", "Ligne", "Début", "Fin", "Quantité", "Arrêt (min)", "Cadence", "Article", "Commentaire"]
+    ["Tous les enregistrements de production par ordre chronologique"],
+    [""],
+    ["Date/Heure", "Équipe", "Ligne", "Heure Début", "Heure Fin", "Quantité (colis)", "Arrêt (min)", "Cadence (colis/h)", "Code Article", "Commentaire"]
   ];
 
   LINES.forEach(line => {
     const recs = srcState.production[line] || [];
-    recs.forEach(r => {
-      prodRows.push([
-        r.dateTime,
-        r.equipe,
-        line,
-        r.start || "",
-        r.end || "",
-        r.quantity || 0,
-        r.arret || 0,
-        r.cadence ? r.cadence.toFixed(2) : "",
-        r.article || "",
-        r.comment || ""
-      ]);
-    });
+    if (recs.length > 0) {
+      prodRows.push([]);
+      prodRows.push(["▶ " + line, "", "", "", "", "", "", "", "", ""]);
+      recs.forEach(r => {
+        prodRows.push([
+          r.dateTime,
+          r.equipe,
+          line,
+          r.start || "-",
+          r.end || "-",
+          r.quantity || 0,
+          r.arret || 0,
+          r.cadence ? r.cadence.toFixed(1) : "-",
+          r.article || "-",
+          r.comment || ""
+        ]);
+      });
+    }
   });
 
   const wsProd = XLSX.utils.aoa_to_sheet(prodRows);
   wsProd['!cols'] = [
-    { wch: 18 },
-    { wch: 8 },
+    { wch: 20 },
+    { wch: 10 },
     { wch: 15 },
-    { wch: 10 },
-    { wch: 10 },
-    { wch: 10 },
     { wch: 12 },
-    { wch: 10 },
+    { wch: 12 },
+    { wch: 18 },
+    { wch: 12 },
+    { wch: 18 },
     { wch: 15 },
-    { wch: 40 }
+    { wch: 45 }
   ];
 
-  XLSX.utils.book_append_sheet(wb, wsProd, "PRODUCTION");
+  XLSX.utils.book_append_sheet(wb, wsProd, "📦 PRODUCTION");
 
-  // ===== ONGLET 3 : ARRÊTS =====
+  // ===== ONGLET 3 : ARRÊTS MACHINES =====
   const arretRows = [
-    ["ARRÊTS"],
+    ["⚠️ HISTORIQUE COMPLET DES ARRÊTS MACHINES"],
     [""],
-    ["Date/Heure", "Ligne", "Sous-ligne", "Machine", "Durée (min)", "Article", "Commentaire"]
+    ["Détail de tous les arrêts enregistrés avec durées et causes"],
+    [""],
+    ["Date/Heure", "Ligne", "Sous-ligne", "Machine", "Durée (min)", "Article concerné", "Commentaire / Cause"]
   ];
 
-  srcState.arrets.forEach(r => {
-    arretRows.push([
-      r.dateTime,
-      r.line,
-      r.sousLigne || "",
-      r.machine,
-      r.duration || 0,
-      r.article || "",
-      r.comment || ""
-    ]);
-  });
+  // Tri par durée décroissante pour mettre en évidence les arrêts les plus longs
+  [...srcState.arrets]
+    .sort((a, b) => (b.duration || 0) - (a.duration || 0))
+    .forEach((r, idx) => {
+      arretRows.push([
+        r.dateTime,
+        r.line,
+        r.sousLigne || "-",
+        r.machine,
+        r.duration || 0,
+        r.article || "-",
+        r.comment || ""
+      ]);
+    });
+
+  arretRows.push([]);
+  arretRows.push([]);
+  const totalDuree = srcState.arrets.reduce((s, r) => s + (r.duration || 0), 0);
+  arretRows.push(["📊 STATISTIQUES"]);
+  arretRows.push(["Nombre total d'arrêts", srcState.arrets.length]);
+  arretRows.push(["Durée cumulée", totalDuree + " minutes"]);
+  arretRows.push(["Durée moyenne par arrêt", srcState.arrets.length > 0 ? (totalDuree / srcState.arrets.length).toFixed(1) + " minutes" : "-"]);
 
   const wsArrets = XLSX.utils.aoa_to_sheet(arretRows);
   wsArrets['!cols'] = [
+    { wch: 20 },
+    { wch: 15 },
+    { wch: 12 },
     { wch: 18 },
-    { wch: 15 },
     { wch: 12 },
-    { wch: 15 },
-    { wch: 12 },
-    { wch: 15 },
-    { wch: 40 }
+    { wch: 18 },
+    { wch: 50 }
   ];
 
-  XLSX.utils.book_append_sheet(wb, wsArrets, "ARRÊTS");
+  XLSX.utils.book_append_sheet(wb, wsArrets, "⚠️ ARRÊTS");
 
-  // ===== ONGLET 4 : ORGANISATION =====
-  if (srcState.organisation.length > 0) {
+  // ===== ONGLET 4 : ORGANISATION & CONSIGNES =====
+  if (srcState.organisation && srcState.organisation.length > 0) {
     const orgRows = [
-      ["ORGANISATION"],
+      ["📋 ORGANISATION & CONSIGNES ATELIER"],
       [""],
-      ["Date/Heure", "Équipe", "Consigne", "Visa", "Validée"]
+      ["Toutes les consignes et instructions transmises pendant la période"],
+      [""],
+      ["Date/Heure", "Équipe", "Consigne / Instruction", "Visa Responsable", "Statut Validation"]
     ];
 
     srcState.organisation.forEach(r => {
@@ -1364,51 +1513,77 @@ function exportPresentationToExcel(srcState, filename) {
         r.dateTime,
         r.equipe,
         r.consigne,
-        r.visa,
-        r.valide ? "Oui" : "Non"
+        r.visa || "-",
+        r.valide ? "✅ Validée" : "❌ En attente"
       ]);
     });
 
+    orgRows.push([]);
+    orgRows.push([]);
+    orgRows.push(["📊 STATISTIQUES"]);
+    orgRows.push(["Nombre de consignes", srcState.organisation.length]);
+    orgRows.push(["Consignes validées", srcState.organisation.filter(o => o.valide).length]);
+    orgRows.push(["En attente de validation", srcState.organisation.filter(o => !o.valide).length]);
+
     const wsOrg = XLSX.utils.aoa_to_sheet(orgRows);
     wsOrg['!cols'] = [
-      { wch: 18 },
-      { wch: 8 },
-      { wch: 50 },
-      { wch: 15 },
-      { wch: 10 }
+      { wch: 20 },
+      { wch: 10 },
+      { wch: 60 },
+      { wch: 20 },
+      { wch: 18 }
     ];
 
-    XLSX.utils.book_append_sheet(wb, wsOrg, "ORGANISATION");
+    XLSX.utils.book_append_sheet(wb, wsOrg, "📋 ORGANISATION");
   }
 
-  // ===== ONGLET 5 : PERSONNEL =====
-  if (srcState.personnel.length > 0) {
+  // ===== ONGLET 5 : PERSONNEL & ÉVÉNEMENTS =====
+  if (srcState.personnel && srcState.personnel.length > 0) {
     const persRows = [
-      ["PERSONNEL"],
+      ["👤 ÉVÉNEMENTS PERSONNEL"],
       [""],
-      ["Date/Heure", "Équipe", "Nom", "Motif", "Commentaire"]
+      ["Absences, retards et autres événements liés au personnel"],
+      [""],
+      ["Date/Heure", "Équipe", "Nom Collaborateur", "Motif", "Détails / Commentaire"]
     ];
 
     srcState.personnel.forEach(r => {
+      const motifIcon = {
+        "Absence": "❌",
+        "Retard": "⏰",
+        "Départ": "🚪",
+        "Autre": "📝"
+      };
       persRows.push([
         r.dateTime,
         r.equipe,
         r.nom,
-        r.motif,
-        r.comment || ""
+        (motifIcon[r.motif] || "") + " " + r.motif,
+        r.comment || "-"
       ]);
+    });
+
+    persRows.push([]);
+    persRows.push([]);
+    persRows.push(["📊 STATISTIQUES PAR MOTIF"]);
+    const motifCount = {};
+    srcState.personnel.forEach(p => {
+      motifCount[p.motif] = (motifCount[p.motif] || 0) + 1;
+    });
+    Object.entries(motifCount).forEach(([motif, count]) => {
+      persRows.push([motif, count + " événement(s)"]);
     });
 
     const wsPers = XLSX.utils.aoa_to_sheet(persRows);
     wsPers['!cols'] = [
-      { wch: 18 },
-      { wch: 8 },
       { wch: 20 },
-      { wch: 15 },
-      { wch: 40 }
+      { wch: 10 },
+      { wch: 25 },
+      { wch: 18 },
+      { wch: 50 }
     ];
 
-    XLSX.utils.book_append_sheet(wb, wsPers, "PERSONNEL");
+    XLSX.utils.book_append_sheet(wb, wsPers, "👤 PERSONNEL");
   }
 
   XLSX.writeFile(wb, filename);
@@ -1717,6 +1892,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadState();
   loadArchives();
   initHeaderDate();
+  initEquipeSelector();
   initNav();
   initLinesSidebar();
   bindProductionForm();
@@ -1736,5 +1912,3 @@ document.addEventListener("DOMContentLoaded", () => {
 
   showSection(state.currentSection || "atelier");
 });
-
-
