@@ -598,7 +598,6 @@ function initArretsForm() {
     const opt = document.createElement("option");
     opt.value = l;
     opt.textContent = l;
-    opt.textContent = l;
     arretLineEl.appendChild(opt);
   });
 
@@ -1081,10 +1080,10 @@ function refreshHistoryView(snapshot) {
  *   PARTIE 4 / 4 – EXPORT GLOBAL
  ********************************************/
 
-function exportStateToExcel(srcState, filename) {
+// ===== EXPORT 1 : DATA (Base de données) =====
+function exportDataToExcel(srcState, filename) {
   if (typeof XLSX === 'undefined') {
-    alert("Bibliothèque XLSX non chargée. Impossible d'exporter.");
-    console.error("XLSX library not found.");
+    alert("Bibliothèque XLSX non chargée.");
     return;
   }
 
@@ -1097,18 +1096,18 @@ function exportStateToExcel(srcState, filename) {
     "Ligne",
     "Sous-ligne",
     "Machine",
-    "Début",
-    "Fin",
-    "Qté",
+    "Heure Début",
+    "Heure Fin",
+    "Quantité",
     "Arrêt (min)",
     "Cadence",
-    "Temps restant",
+    "Temps Restant",
     "Commentaire",
     "Article",
-    "Nom personnel",
-    "Motif personnel",
-    "Visa organisation",
-    "Validée organisation"
+    "Nom Personnel",
+    "Motif Personnel",
+    "Visa",
+    "Validée"
   ]];
 
   // PRODUCTION
@@ -1124,8 +1123,8 @@ function exportStateToExcel(srcState, filename) {
         "",
         r.start || "",
         r.end || "",
-        r.quantity || "",
-        r.arret || "",
+        r.quantity || 0,
+        r.arret || 0,
         r.cadence || "",
         r.remainingTime || "",
         r.comment || "",
@@ -1150,7 +1149,7 @@ function exportStateToExcel(srcState, filename) {
       "",
       "",
       "",
-      r.duration || "",
+      r.duration || 0,
       "",
       "",
       r.comment || "",
@@ -1211,23 +1210,224 @@ function exportStateToExcel(srcState, filename) {
   });
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  XLSX.utils.book_append_sheet(wb, ws, "GLOBAL");
+  
+  // Auto-largeur des colonnes
+  const colWidths = rows[0].map((_, i) => {
+    const maxLen = Math.max(...rows.map(row => String(row[i] || "").length));
+    return { wch: Math.min(maxLen + 2, 50) };
+  });
+  ws['!cols'] = colWidths;
+
+  XLSX.utils.book_append_sheet(wb, ws, "DATA");
+  XLSX.writeFile(wb, filename);
+}
+
+// ===== EXPORT 2 : PRÉSENTATION (Réunion) =====
+function exportPresentationToExcel(srcState, filename) {
+  if (typeof XLSX === 'undefined') {
+    alert("Bibliothèque XLSX non chargée.");
+    return;
+  }
+
+  const wb = XLSX.utils.book_new();
+
+  // ===== ONGLET 1 : SYNTHÈSE =====
+  const synthRows = [
+    ["RAPPORT DE PRODUCTION - ATELIER PPNC"],
+    [""],
+    ["Date d'export", new Date().toLocaleDateString("fr-FR")],
+    ["Équipe", srcState.currentEquipe],
+    [""],
+    ["=== PRODUCTION PAR LIGNE ==="],
+    ["Ligne", "Quantité Totale", "Cadence Moyenne", "Articles"]
+  ];
+
+  LINES.forEach(line => {
+    const recs = srcState.production[line] || [];
+    const total = recs.reduce((s, r) => s + (r.quantity || 0), 0);
+    const cadences = recs.map(r => r.cadence).filter(c => c && c > 0);
+    const avgCad = cadences.length ? (cadences.reduce((s, c) => s + c, 0) / cadences.length).toFixed(2) : "-";
+    const articles = [...new Set(recs.map(r => r.article).filter(a => a))].join(", ") || "-";
+    
+    synthRows.push([line, total, avgCad, articles]);
+  });
+
+  synthRows.push([]);
+  synthRows.push(["=== ARRÊTS MAJEURS ==="]);
+  synthRows.push(["Ligne", "Machine", "Durée (min)", "Commentaire"]);
+
+  [...srcState.arrets]
+    .sort((a, b) => (b.duration || 0) - (a.duration || 0))
+    .slice(0, 10)
+    .forEach(r => {
+      synthRows.push([r.line, r.machine, r.duration, r.comment || ""]);
+    });
+
+  const wsSynth = XLSX.utils.aoa_to_sheet(synthRows);
+  
+  // Styles pour le titre (gras, grande police)
+  if (!wsSynth['A1'].s) wsSynth['A1'].s = {};
+  wsSynth['A1'].s = { font: { bold: true, sz: 16 } };
+  
+  wsSynth['!cols'] = [
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 50 }
+  ];
+
+  XLSX.utils.book_append_sheet(wb, wsSynth, "SYNTHÈSE");
+
+  // ===== ONGLET 2 : PRODUCTION DÉTAIL =====
+  const prodRows = [
+    ["PRODUCTION DÉTAILLÉE"],
+    [""],
+    ["Date/Heure", "Équipe", "Ligne", "Début", "Fin", "Quantité", "Arrêt (min)", "Cadence", "Article", "Commentaire"]
+  ];
+
+  LINES.forEach(line => {
+    const recs = srcState.production[line] || [];
+    recs.forEach(r => {
+      prodRows.push([
+        r.dateTime,
+        r.equipe,
+        line,
+        r.start || "",
+        r.end || "",
+        r.quantity || 0,
+        r.arret || 0,
+        r.cadence ? r.cadence.toFixed(2) : "",
+        r.article || "",
+        r.comment || ""
+      ]);
+    });
+  });
+
+  const wsProd = XLSX.utils.aoa_to_sheet(prodRows);
+  wsProd['!cols'] = [
+    { wch: 18 },
+    { wch: 8 },
+    { wch: 15 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 10 },
+    { wch: 15 },
+    { wch: 40 }
+  ];
+
+  XLSX.utils.book_append_sheet(wb, wsProd, "PRODUCTION");
+
+  // ===== ONGLET 3 : ARRÊTS =====
+  const arretRows = [
+    ["ARRÊTS"],
+    [""],
+    ["Date/Heure", "Ligne", "Sous-ligne", "Machine", "Durée (min)", "Article", "Commentaire"]
+  ];
+
+  srcState.arrets.forEach(r => {
+    arretRows.push([
+      r.dateTime,
+      r.line,
+      r.sousLigne || "",
+      r.machine,
+      r.duration || 0,
+      r.article || "",
+      r.comment || ""
+    ]);
+  });
+
+  const wsArrets = XLSX.utils.aoa_to_sheet(arretRows);
+  wsArrets['!cols'] = [
+    { wch: 18 },
+    { wch: 15 },
+    { wch: 12 },
+    { wch: 15 },
+    { wch: 12 },
+    { wch: 15 },
+    { wch: 40 }
+  ];
+
+  XLSX.utils.book_append_sheet(wb, wsArrets, "ARRÊTS");
+
+  // ===== ONGLET 4 : ORGANISATION =====
+  if (srcState.organisation.length > 0) {
+    const orgRows = [
+      ["ORGANISATION"],
+      [""],
+      ["Date/Heure", "Équipe", "Consigne", "Visa", "Validée"]
+    ];
+
+    srcState.organisation.forEach(r => {
+      orgRows.push([
+        r.dateTime,
+        r.equipe,
+        r.consigne,
+        r.visa,
+        r.valide ? "Oui" : "Non"
+      ]);
+    });
+
+    const wsOrg = XLSX.utils.aoa_to_sheet(orgRows);
+    wsOrg['!cols'] = [
+      { wch: 18 },
+      { wch: 8 },
+      { wch: 50 },
+      { wch: 15 },
+      { wch: 10 }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, wsOrg, "ORGANISATION");
+  }
+
+  // ===== ONGLET 5 : PERSONNEL =====
+  if (srcState.personnel.length > 0) {
+    const persRows = [
+      ["PERSONNEL"],
+      [""],
+      ["Date/Heure", "Équipe", "Nom", "Motif", "Commentaire"]
+    ];
+
+    srcState.personnel.forEach(r => {
+      persRows.push([
+        r.dateTime,
+        r.equipe,
+        r.nom,
+        r.motif,
+        r.comment || ""
+      ]);
+    });
+
+    const wsPers = XLSX.utils.aoa_to_sheet(persRows);
+    wsPers['!cols'] = [
+      { wch: 18 },
+      { wch: 8 },
+      { wch: 20 },
+      { wch: 15 },
+      { wch: 40 }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, wsPers, "PERSONNEL");
+  }
+
   XLSX.writeFile(wb, filename);
 }
 
 function bindExportGlobal() {
-  const btn = document.getElementById("exportGlobalBtn");
-  if (!btn) return;
+  const presentationBtn = document.getElementById("exportPresentationBtn");
+  
+  if (presentationBtn) {
+    presentationBtn.addEventListener("click", () => {
+      const now = getNow();
+      const hh = String(now.getHours()).padStart(2, "0");
+      const mm = String(now.getMinutes()).padStart(2, "0");
+      const ss = String(now.getSeconds()).padStart(2, "0");
 
-  btn.addEventListener("click", () => {
-    const now = getNow();
-    const hh = String(now.getHours()).padStart(2, "0");
-    const mm = String(now.getMinutes()).padStart(2, "0");
-    const ss = String(now.getSeconds()).padStart(2, "0");
-
-    const filename = `Atelier_PPNC_${hh}h${mm}_${ss}.xlsx`;
-    exportStateToExcel(state, filename);
-  });
+      const filename = `Atelier_PRESENTATION_${hh}h${mm}_${ss}.xlsx`;
+      exportPresentationToExcel(state, filename);
+    });
+  }
 }
 
 /********************************************
@@ -1273,9 +1473,16 @@ function bindRAZEquipe() {
     saveArchives();
     refreshHistorySelect();
 
-    const filename =
-      `Atelier_EQ${finished}_Q${quantieme}_S${week}_${hh}h${mm}.xlsx`;
-    exportStateToExcel(snap.state, filename);
+    // ✅ DOUBLE EXPORT : DATA + PRÉSENTATION
+    const filenameData = `Atelier_DATA_EQ${finished}_Q${quantieme}_S${week}_${hh}h${mm}.xlsx`;
+    const filenamePres = `Atelier_PRESENTATION_EQ${finished}_Q${quantieme}_S${week}_${hh}h${mm}.xlsx`;
+    
+    exportDataToExcel(snap.state, filenameData);
+    
+    // Petit délai pour éviter que les 2 téléchargements se chevauchent
+    setTimeout(() => {
+      exportPresentationToExcel(snap.state, filenamePres);
+    }, 500);
 
     let next = "M";
     if (finished === "M") next = "AM";
@@ -1529,4 +1736,5 @@ document.addEventListener("DOMContentLoaded", () => {
 
   showSection(state.currentSection || "atelier");
 });
+
 
