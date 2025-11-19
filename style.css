@@ -796,7 +796,8 @@ body.light-mode .card::before {
 }
 
 body.light-mode .card h3 {
-  color: #102a43;
+  color: #0f1419;
+  font-weight: 600;
 }
 
 body.light-mode .card h3::before {
@@ -810,11 +811,18 @@ body.light-mode .summary-card {
 
 body.light-mode .summary-card-title,
 body.light-mode .summary-sub {
-  color: #5b6c85;
+  color: #3d4e63;
 }
 
 body.light-mode .summary-main {
-  color: #102a43;
+  color: #0f1419;
+  font-weight: 600;
+}
+
+body.light-mode .form-group label,
+body.light-mode .form-row label {
+  color: #1a202c;
+  font-weight: 600;
 }
 
 body.light-mode input,
@@ -837,29 +845,33 @@ body.light-mode .info-row {
 }
 
 body.light-mode .info-row strong {
-  color: #5b6c85;
+  color: #2c3e50;
+  font-weight: 600;
 }
 
 body.light-mode .info-row span {
-  color: #1453d6;
+  color: #0d47a1;
+  font-weight: 600;
 }
 
 body.light-mode .table th,
 body.light-mode .data-table th {
-  color: #5b6c85;
-  border-bottom: 1px solid #d5e0f5;
-  background: #f7fbff;
+  color: #2c3e50;
+  border-bottom: 2px solid #b0c4de;
+  background: #f0f4f8;
+  font-weight: 600;
 }
 
 body.light-mode .table td,
 body.light-mode .data-table td {
-  border-bottom: 1px solid #e3ecff;
-  color: #102a43;
+  border-bottom: 1px solid #c8d6e5;
+  color: #1a202c;
+  font-weight: 500;
 }
 
 body.light-mode .table tr:hover,
 body.light-mode .data-table tr:hover {
-  background: #edf3ff;
+  background: #e3ecf5;
 }
 
 body.light-mode .primary-btn {
@@ -952,7 +964,8 @@ body.light-mode .calc-btn.equals:hover {
 }
 
 body.light-mode .helper-text {
-  color: #5b6c85;
+  color: #4a5568;
+  font-weight: 500;
 }
 
 /* LANDSCAPE MODE AUTO */
@@ -1033,6 +1046,5 @@ body.is-landscape {
     left: 12px;
   }
 }
-
 
 
