@@ -1,70 +1,70 @@
-"/******************************
+/******************************
  *   PARTIE 1 / 4 – CONFIG
  ******************************/
 
 // === CONFIG & ÉTAT GLOBAL ===
 
 const LINES = [
-  \"Râpé\",
-  \"T2\",
-  \"RT\",
-  \"OMORI\",
-  \"T1\",
-  \"Sticks\",
-  \"Emballage\",
-  \"Dés\",
-  \"Filets\",
-  \"Prédécoupé\",
+  "Râpé",
+  "T2",
+  "RT",
+  "OMORI",
+  "T1",
+  "Sticks",
+  "Emballage",
+  "Dés",
+  "Filets",
+  "Prédécoupé",
 ];
 
 // Stockage version
-const STORAGE_KEY = \"atelier_ppnc_state_v2\";  
-const ARCHIVES_KEY = \"atelier_ppnc_archives_v2\";
+const STORAGE_KEY = "atelier_ppnc_state_v2";  
+const ARCHIVES_KEY = "atelier_ppnc_archives_v2";
 
 let archives = []; // [{ id, label, savedAt, equipe, week, quantieme, state }]
 
 // Sous-lignes pour Râpé
 const ARRET_SUBLINES = {
-  \"Râpé\": [\"R1\", \"R2\", \"R1/R2\"],
+  "Râpé": ["R1", "R2", "R1/R2"],
 };
 
 // Machines déclarées
 const ARRET_MACHINES = {
-  \"Râpé\": [
-    \"Cubeuse\", \"Cheesix\", \"Liftvrac\", \"Associative\", \"Ensacheuse\",
-    \"Encaisseuse\", \"Smartdate\", \"Bizerba\", \"DPM\", \"Scotcheuse\",
-    \"Markem\", \"Ascenseur\",
+  "Râpé": [
+    "Cubeuse", "Cheesix", "Liftvrac", "Associative", "Ensacheuse",
+    "Encaisseuse", "Smartdate", "Bizerba", "DPM", "Scotcheuse",
+    "Markem", "Ascenseur",
   ],
-  \"T2\": [
-    \"Selvex\", \"Trieuse\", \"Robots\", \"Tiromat\", \"Vision\",
-    \"Convoyeur\", \"DPM\", \"Bizerba\", \"Suremballage\", \"Markem\",
-    \"Scotcheuse\", \"Balance cartons\", \"Formeuse caisse\", \"Ascenseur\",
+  "T2": [
+    "Selvex", "Trieuse", "Robots", "Tiromat", "Vision",
+    "Convoyeur", "DPM", "Bizerba", "Suremballage", "Markem",
+    "Scotcheuse", "Balance cartons", "Formeuse caisse", "Ascenseur",
   ],
-  \"OMORI\": [
-    \"BFR\", \"Accumulateur\", \"OMORI\", \"Videojet\", \"DPM\",
-    \"Encaisseuse\", \"Balance cartons\", \"Ascenseur\",
+  "OMORI": [
+    "BFR", "Accumulateur", "OMORI", "Videojet", "DPM",
+    "Encaisseuse", "Balance cartons", "Ascenseur",
   ],
-  \"Emballage\": [
-    \"Brinkman\", \"Encaisseuse\", \"Bizerba\", \"Palettiseur\",
-    \"Paraffineuse\", \"Râpé\", \"Ecroûtage\", \"Alpma\",
+  "Emballage": [
+    "Brinkman", "Encaisseuse", "Bizerba", "Palettiseur",
+    "Paraffineuse", "Râpé", "Ecroûtage", "Alpma",
   ],
-  \"T1\": [
-    \"Slicer\", \"AES\", \"Tiromat\", \"Préhenseur\",
-    \"DPM\", \"Encaisseuse T1\", \"Encaisseuse David\",
-    \"Balance cartons\", \"Ascenseur\",
+  "T1": [
+    "Slicer", "AES", "Tiromat", "Préhenseur",
+    "DPM", "Encaisseuse T1", "Encaisseuse David",
+    "Balance cartons", "Ascenseur",
   ],
-  \"Dés\": [\"Cheesix\", \"Meca 2002\", \"DPM\", \"Bizerba\", \"Scotcheuse\"],
-  \"Filets\": [\"Lieuse\", \"C-Pack\", \"Etiqueteuse\", \"Scotcheuse\"],
-  \"Prédécoupé\": [\"DPM\", \"Selvex\", \"Bizerba\", \"Quartivac\", \"Scotcheuse\"],
-  \"RT\": [\"Autre\"],
-  \"Sticks\": [\"Autre\"],
+  "Dés": ["Cheesix", "Meca 2002", "DPM", "Bizerba", "Scotcheuse"],
+  "Filets": ["Lieuse", "C-Pack", "Etiqueteuse", "Scotcheuse"],
+  "Prédécoupé": ["DPM", "Selvex", "Bizerba", "Quartivac", "Scotcheuse"],
+  "RT": ["Autre"],
+  "Sticks": ["Autre"],
 };
 
 // === ÉTAT GLOBAL ===
 let state = {
-  currentSection: \"atelier\",
+  currentSection: "atelier",
   currentLine: LINES[0],
-  currentEquipe: \"M\",
+  currentEquipe: "M",
   production: {},
   arrets: [],
   organisation: [],
@@ -105,15 +105,15 @@ function getQuantieme(d) {
 }
 
 function formatDateTime(d) {
-  const dd = String(d.getDate()).padStart(2, \"0\");
-  const mm = String(d.getMonth() + 1).padStart(2, \"0\");
-  const hh = String(d.getHours()).padStart(2, \"0\");
-  const mi = String(d.getMinutes()).padStart(2, \"0\");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
   return `${dd}/${mm}/${d.getFullYear()} ${hh}h${mi}`;
 }
 
 function formatTimeRemaining(min) {
-  if (!min || min <= 0) return \"-\";
+  if (!min || min <= 0) return "-";
   const h = Math.floor(min / 60);
   const m = Math.round(min % 60);
   if (h === 0) return `${m} min`;
@@ -123,7 +123,7 @@ function formatTimeRemaining(min) {
 
 function parseTimeToMinutes(t) {
   if (!t) return null;
-  const [h, m] = t.split(\":\").map(Number);
+  const [h, m] = t.split(":").map(Number);
   if (isNaN(h) || isNaN(m)) return null;
   return h * 60 + m;
 }
@@ -137,8 +137,8 @@ function quantiemeToDate(quantieme, year) {
 
 // Formater date pour DDM
 function formatDateDDM(d) {
-  const dd = String(d.getDate()).padStart(2, \"0\");
-  const mm = String(d.getMonth() + 1).padStart(2, \"0\");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
   return `${dd}/${mm}/${d.getFullYear()}`;
 }
 
@@ -156,9 +156,9 @@ function loadState() {
     const parsed = JSON.parse(raw);
 
     const base = {
-      currentSection: \"atelier\",
+      currentSection: "atelier",
       currentLine: LINES[0],
-      currentEquipe: \"M\",
+      currentEquipe: "M",
       production: {},
       arrets: [],
       organisation: [],
@@ -174,7 +174,7 @@ function loadState() {
     });
 
   } catch (e) {
-    console.error(\"loadState error\", e);
+    console.error("loadState error", e);
     LINES.forEach(l => state.production[l] = []);
   }
 }
@@ -183,7 +183,7 @@ function saveState() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
-    console.error(\"saveState error\", e);
+    console.error("saveState error", e);
   }
 }
 
@@ -207,7 +207,7 @@ function saveArchives() {
  ******************************/
 
 function initHeaderDate() {
-  const el = document.getElementById(\"header-datetime\");
+  const el = document.getElementById("header-datetime");
   if (!el) return;
 
   function update() {
@@ -215,10 +215,10 @@ function initHeaderDate() {
     const week = getWeekNumber(now);
     const q = getQuantieme(now);
 
-    const d = String(now.getDate()).padStart(2, \"0\");
-    const m = String(now.getMonth() + 1).padStart(2, \"0\");
-    const hh = String(now.getHours()).padStart(2, \"0\");
-    const mm = String(now.getMinutes()).padStart(2, \"0\");
+    const d = String(now.getDate()).padStart(2, "0");
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
 
     el.textContent =
       `Quantième ${q} • ${d}/${m}/${now.getFullYear()} • ` +
@@ -239,24 +239,24 @@ function showSection(section) {
   state.currentSection = section;
   saveState();
 
-  document.querySelectorAll(\".section\").forEach(sec =>
-    sec.classList.toggle(\"visible\", sec.id === `section-${section}`)
+  document.querySelectorAll(".section").forEach(sec =>
+    sec.classList.toggle("visible", sec.id === `section-${section}`)
   );
 
-  document.querySelectorAll(\".nav-btn\").forEach(btn =>
-    btn.classList.toggle(\"active\", btn.dataset.section === section)
+  document.querySelectorAll(".nav-btn").forEach(btn =>
+    btn.classList.toggle("active", btn.dataset.section === section)
   );
 
-  if (section === \"atelier\") refreshAtelierView();
-  else if (section === \"production\") refreshProductionView();
-  else if (section === \"arrets\") refreshArretsView();
-  else if (section === \"organisation\") refreshOrganisationView();
-  else if (section === \"personnel\") refreshPersonnelView();
+  if (section === "atelier") refreshAtelierView();
+  else if (section === "production") refreshProductionView();
+  else if (section === "arrets") refreshArretsView();
+  else if (section === "organisation") refreshOrganisationView();
+  else if (section === "personnel") refreshPersonnelView();
 }
 
 function initNav() {
-  document.querySelectorAll(\".nav-btn\").forEach(btn => {
-    btn.addEventListener(\"click\", () => {
+  document.querySelectorAll(".nav-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
       showSection(btn.dataset.section);
     });
   });
@@ -265,18 +265,18 @@ function initNav() {
 // === LIGNES (Production) ===
 
 function initLinesSidebar() {
-  const container = document.getElementById(\"linesList\");
+  const container = document.getElementById("linesList");
   if (!container) return;
   
-  container.innerHTML = \"\";
+  container.innerHTML = "";
 
   LINES.forEach(line => {
-    const btn = document.createElement(\"button\");
-    btn.className = \"line-btn\";
+    const btn = document.createElement("button");
+    btn.className = "line-btn";
     btn.textContent = line;
     btn.dataset.line = line;
 
-    btn.addEventListener(\"click\", () => selectLine(line, true));
+    btn.addEventListener("click", () => selectLine(line, true));
 
     container.appendChild(btn);
   });
@@ -288,19 +288,19 @@ function selectLine(line, scrollToForm) {
   state.currentLine = line;
   saveState();
 
-  const titleEl = document.getElementById(\"currentLineTitle\");
+  const titleEl = document.getElementById("currentLineTitle");
   if (titleEl) titleEl.textContent = `Ligne ${line}`;
 
-  document.querySelectorAll(\".line-btn\").forEach(b =>
-    b.classList.toggle(\"active\", b.dataset.line === line)
+  document.querySelectorAll(".line-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.line === line)
   );
 
   refreshProductionForm();
   refreshProductionHistoryTable();
 
   if (scrollToForm) {
-    const card = document.querySelector(\"#section-production .card\");
-    if (card) card.scrollIntoView({ behavior: \"smooth\", block: \"start\" });
+    const card = document.querySelector("#section-production .card");
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
 
@@ -311,9 +311,9 @@ function getCurrentLineRecords() {
 }
 
 function computeCadenceFromInputs() {
-  const s = document.getElementById(\"prodStartTime\")?.value;
-  const e = document.getElementById(\"prodEndTime\")?.value;
-  const q = Number(document.getElementById(\"prodQuantity\")?.value) || 0;
+  const s = document.getElementById("prodStartTime")?.value;
+  const e = document.getElementById("prodEndTime")?.value;
+  const q = Number(document.getElementById("prodQuantity")?.value) || 0;
 
   const sMin = parseTimeToMinutes(s);
   const eMin = parseTimeToMinutes(e);
@@ -327,7 +327,7 @@ function computeCadenceFromInputs() {
 }
 
 function computeRefCadenceForLine(line) {
-  const manualEl = document.getElementById(\"prodCadenceManual\");
+  const manualEl = document.getElementById("prodCadenceManual");
   const mana = Number(manualEl?.value);
   if (mana > 0) return mana;
 
@@ -342,21 +342,21 @@ function computeRefCadenceForLine(line) {
 
 function updateCadenceDisplay() {
   const cad = computeCadenceFromInputs();
-  const el = document.getElementById(\"prodCadenceDisplay\");
-  if (el) el.textContent = cad ? cad.toFixed(2) : \"-\";
+  const el = document.getElementById("prodCadenceDisplay");
+  if (el) el.textContent = cad ? cad.toFixed(2) : "-";
 }
 
 function updateRemainingTimeDisplay() {
-  const remainingEl = document.getElementById(\"prodRemaining\");
+  const remainingEl = document.getElementById("prodRemaining");
   const remaining = Number(remainingEl?.value) || 0;
   const line = state.currentLine;
   const cadRef = computeRefCadenceForLine(line);
-  const el = document.getElementById(\"prodRemainingTimeDisplay\");
+  const el = document.getElementById("prodRemainingTimeDisplay");
 
   if (!el) return;
 
   if (!remaining || !cadRef || cadRef <= 0) {
-    el.textContent = \"-\";
+    el.textContent = "-";
     return;
   }
 
@@ -370,14 +370,14 @@ function saveDraft() {
   const L = state.currentLine;
 
   state.formDraft[L] = {
-    start: document.getElementById(\"prodStartTime\")?.value || \"\",
-    end: document.getElementById(\"prodEndTime\")?.value || \"\",
-    qty: document.getElementById(\"prodQuantity\")?.value || \"\",
-    remaining: document.getElementById(\"prodRemaining\")?.value || \"\",
-    cadenceMan: document.getElementById(\"prodCadenceManual\")?.value || \"\",
-    arret: document.getElementById(\"prodArretMinutes\")?.value || \"\",
-    comment: document.getElementById(\"prodComment\")?.value || \"\",
-    article: document.getElementById(\"prodCodeArticle\")?.value || \"\",
+    start: document.getElementById("prodStartTime")?.value || "",
+    end: document.getElementById("prodEndTime")?.value || "",
+    qty: document.getElementById("prodQuantity")?.value || "",
+    remaining: document.getElementById("prodRemaining")?.value || "",
+    cadenceMan: document.getElementById("prodCadenceManual")?.value || "",
+    arret: document.getElementById("prodArretMinutes")?.value || "",
+    comment: document.getElementById("prodComment")?.value || "",
+    article: document.getElementById("prodCodeArticle")?.value || "",
   };
 
   saveState();
@@ -389,17 +389,17 @@ function loadDraft() {
 
   const setVal = (id, val) => {
     const el = document.getElementById(id);
-    if (el) el.value = val || \"\";
+    if (el) el.value = val || "";
   };
 
-  setVal(\"prodStartTime\", d.start);
-  setVal(\"prodEndTime\", d.end);
-  setVal(\"prodQuantity\", d.qty);
-  setVal(\"prodRemaining\", d.remaining);
-  setVal(\"prodCadenceManual\", d.cadenceMan);
-  setVal(\"prodArretMinutes\", d.arret);
-  setVal(\"prodComment\", d.comment);
-  setVal(\"prodCodeArticle\", d.article);
+  setVal("prodStartTime", d.start);
+  setVal("prodEndTime", d.end);
+  setVal("prodQuantity", d.qty);
+  setVal("prodRemaining", d.remaining);
+  setVal("prodCadenceManual", d.cadenceMan);
+  setVal("prodArretMinutes", d.arret);
+  setVal("prodComment", d.comment);
+  setVal("prodCodeArticle", d.article);
 
   updateCadenceDisplay();
   updateRemainingTimeDisplay();
@@ -414,36 +414,36 @@ function refreshProductionForm() {
 // === TABLE HISTORIQUE DES PRODUCTIONS ===
 
 function refreshProductionHistoryTable() {
-  const table = document.getElementById(\"prodHistoryTable\");
+  const table = document.getElementById("prodHistoryTable");
   if (!table) return;
   
-  const tbody = table.querySelector(\"tbody\");
+  const tbody = table.querySelector("tbody");
   if (!tbody) return;
   
-  tbody.innerHTML = \"\";
+  tbody.innerHTML = "";
 
   getCurrentLineRecords().forEach((rec, idx) => {
-    const tr = document.createElement(\"tr\");
+    const tr = document.createElement("tr");
 
     tr.innerHTML = `
       <td>${rec.dateTime}</td>
       <td>${rec.equipe}</td>
-      <td>${rec.start || \"-\"}</td>
-      <td>${rec.end || \"-\"}</td>
+      <td>${rec.start || "-"}</td>
+      <td>${rec.end || "-"}</td>
       <td>${rec.quantity}</td>
       <td>${rec.arret || 0}</td>
-      <td>${rec.cadence ? rec.cadence.toFixed(2) : \"-\"}</td>
-      <td>${rec.remainingTime || \"-\"}</td>
-      <td>${rec.comment || \"\"}</td>
-      <td>${rec.article || \"\"}</td>
-      <td><button class=\"secondary-btn\" data-idx=\"${idx}\">✕</button></td>
+      <td>${rec.cadence ? rec.cadence.toFixed(2) : "-"}</td>
+      <td>${rec.remainingTime || "-"}</td>
+      <td>${rec.comment || ""}</td>
+      <td>${rec.article || ""}</td>
+      <td><button class="secondary-btn" data-idx="${idx}">✕</button></td>
     `;
 
     tbody.appendChild(tr);
   });
 
-  tbody.querySelectorAll(\"button[data-idx]\").forEach(btn => {
-    btn.addEventListener(\"click\", () => {
+  tbody.querySelectorAll("button[data-idx]").forEach(btn => {
+    btn.addEventListener("click", () => {
       const arr = getCurrentLineRecords();
       const i = Number(btn.dataset.idx);
       arr.splice(i, 1);
@@ -458,30 +458,30 @@ function refreshProductionHistoryTable() {
 
 function bindProductionForm() {
   const formIds = [
-    \"prodStartTime\",
-    \"prodEndTime\",
-    \"prodQuantity\",
-    \"prodRemaining\",
-    \"prodCadenceManual\",
-    \"prodArretMinutes\",
-    \"prodComment\",
-    \"prodCodeArticle\"
+    "prodStartTime",
+    "prodEndTime",
+    "prodQuantity",
+    "prodRemaining",
+    "prodCadenceManual",
+    "prodArretMinutes",
+    "prodComment",
+    "prodCodeArticle"
   ];
 
   formIds.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     
-    el.addEventListener(\"input\", () => {
-      if (id !== \"prodComment\") updateCadenceDisplay();
-      if (id !== \"prodComment\") updateRemainingTimeDisplay();
+    el.addEventListener("input", () => {
+      if (id !== "prodComment") updateCadenceDisplay();
+      if (id !== "prodComment") updateRemainingTimeDisplay();
       saveDraft();
     });
   });
 
-  const saveBtn = document.getElementById(\"prodSaveBtn\");
+  const saveBtn = document.getElementById("prodSaveBtn");
   if (saveBtn) {
-    saveBtn.addEventListener(\"click\", () => {
+    saveBtn.addEventListener("click", () => {
       const now = getNow();
       const L = state.currentLine;
       const equipe = state.currentEquipe;
@@ -489,18 +489,18 @@ function bindProductionForm() {
       const rec = {
         dateTime: formatDateTime(now),
         equipe,
-        start: document.getElementById(\"prodStartTime\")?.value || \"\",
-        end: document.getElementById(\"prodEndTime\")?.value || \"\",
-        quantity: Number(document.getElementById(\"prodQuantity\")?.value) || 0,
+        start: document.getElementById("prodStartTime")?.value || "",
+        end: document.getElementById("prodEndTime")?.value || "",
+        quantity: Number(document.getElementById("prodQuantity")?.value) || 0,
         remainingTime:
-          document.getElementById(\"prodRemainingTimeDisplay\")?.textContent || \"-\",
-        arret: Number(document.getElementById(\"prodArretMinutes\")?.value) || 0,
+          document.getElementById("prodRemainingTimeDisplay")?.textContent || "-",
+        arret: Number(document.getElementById("prodArretMinutes")?.value) || 0,
         cadence:
-          Number(document.getElementById(\"prodCadenceManual\")?.value) ||
+          Number(document.getElementById("prodCadenceManual")?.value) ||
           computeCadenceFromInputs() ||
           null,
-        comment: document.getElementById(\"prodComment\")?.value || \"\",
-        article: document.getElementById(\"prodCodeArticle\")?.value || \"\",
+        comment: document.getElementById("prodComment")?.value || "",
+        article: document.getElementById("prodCodeArticle")?.value || "",
       };
 
       state.production[L].push(rec);
@@ -519,9 +519,9 @@ function bindProductionForm() {
     });
   }
 
-  const undoBtn = document.getElementById(\"prodUndoBtn\");
+  const undoBtn = document.getElementById("prodUndoBtn");
   if (undoBtn) {
-    undoBtn.addEventListener(\"click\", () => {
+    undoBtn.addEventListener("click", () => {
       const arr = getCurrentLineRecords();
       if (arr.length) arr.pop();
       saveState();
@@ -537,9 +537,9 @@ function refreshProductionView() {
   refreshProductionForm();
   refreshProductionHistoryTable();
 
-  const table = document.getElementById(\"prodHistoryTable\");
+  const table = document.getElementById("prodHistoryTable");
   if (table && table.parentElement) {
-    table.parentElement.style.overflowX = \"auto\";
+    table.parentElement.style.overflowX = "auto";
   }
 }
 
@@ -556,25 +556,25 @@ function updateArretControlsForLine() {
 
   // Sous-zones pour Râpé
   if (arretSousZoneRowEl && arretSousZoneEl) {
-    if (line === \"Râpé\") {
-      arretSousZoneRowEl.style.display = \"\";
-      arretSousZoneEl.innerHTML = \"\";
-      ARRET_SUBLINES[\"Râpé\"].forEach(s => {
-        const opt = document.createElement(\"option\");
+    if (line === "Râpé") {
+      arretSousZoneRowEl.style.display = "";
+      arretSousZoneEl.innerHTML = "";
+      ARRET_SUBLINES["Râpé"].forEach(s => {
+        const opt = document.createElement("option");
         opt.value = s;
         opt.textContent = s;
         arretSousZoneEl.appendChild(opt);
       });
     } else {
-      arretSousZoneRowEl.style.display = \"none\";
-      arretSousZoneEl.innerHTML = \"\";
+      arretSousZoneRowEl.style.display = "none";
+      arretSousZoneEl.innerHTML = "";
     }
   }
 
   // Machines
-  arretMachineEl.innerHTML = \"\";
-  (ARRET_MACHINES[line] || [\"Autre\"]).forEach(m => {
-    const opt = document.createElement(\"option\");
+  arretMachineEl.innerHTML = "";
+  (ARRET_MACHINES[line] || ["Autre"]).forEach(m => {
+    const opt = document.createElement("option");
     opt.value = m;
     opt.textContent = m;
     arretMachineEl.appendChild(opt);
@@ -584,55 +584,56 @@ function updateArretControlsForLine() {
 // === ARRETS INIT ===
 
 function initArretsForm() {
-  arretLineEl = document.getElementById(\"arretLine\");
-  arretSousZoneEl = document.getElementById(\"arretSousZone\");
-  arretMachineEl = document.getElementById(\"arretMachine\");
+  arretLineEl = document.getElementById("arretLine");
+  arretSousZoneEl = document.getElementById("arretSousZone");
+  arretMachineEl = document.getElementById("arretMachine");
   
   if (!arretLineEl || !arretSousZoneEl || !arretMachineEl) return;
   
-  arretSousZoneRowEl = arretSousZoneEl.closest(\".form-row\");
+  arretSousZoneRowEl = arretSousZoneEl.closest(".form-row");
 
   // Lignes dans la liste
-  arretLineEl.innerHTML = \"\";
+  arretLineEl.innerHTML = "";
   LINES.forEach(l => {
-    const opt = document.createElement(\"option\");
+    const opt = document.createElement("option");
     opt.value = l;
+    opt.textContent = l;
     opt.textContent = l;
     arretLineEl.appendChild(opt);
   });
 
-  arretLineEl.addEventListener(\"change\", updateArretControlsForLine);
+  arretLineEl.addEventListener("change", updateArretControlsForLine);
   updateArretControlsForLine();
 
   // Enregistrer un arrêt
-  const saveBtn = document.getElementById(\"arretSaveBtn\");
+  const saveBtn = document.getElementById("arretSaveBtn");
   if (saveBtn) {
-    saveBtn.addEventListener(\"click\", () => {
+    saveBtn.addEventListener("click", () => {
       const now = getNow();
 
       const rec = {
         dateTime: formatDateTime(now),
         line: arretLineEl.value,
         sousLigne:
-          arretSousZoneRowEl && arretSousZoneRowEl.style.display !== \"none\"
+          arretSousZoneRowEl && arretSousZoneRowEl.style.display !== "none"
             ? arretSousZoneEl.value
-            : \"\",
+            : "",
         machine: arretMachineEl.value,
-        duration: Number(document.getElementById(\"arretDuration\")?.value) || 0,
-        comment: document.getElementById(\"arretComment\")?.value || \"\",
-        article: document.getElementById(\"arretArticle\")?.value || \"\",
+        duration: Number(document.getElementById("arretDuration")?.value) || 0,
+        comment: document.getElementById("arretComment")?.value || "",
+        article: document.getElementById("arretArticle")?.value || "",
       };
 
       state.arrets.push(rec);
       saveState();
 
-      const durationEl = document.getElementById(\"arretDuration\");
-      const commentEl = document.getElementById(\"arretComment\");
-      const articleEl = document.getElementById(\"arretArticle\");
+      const durationEl = document.getElementById("arretDuration");
+      const commentEl = document.getElementById("arretComment");
+      const articleEl = document.getElementById("arretArticle");
       
-      if (durationEl) durationEl.value = \"\";
-      if (commentEl) commentEl.value = \"\";
-      if (articleEl) articleEl.value = \"\";
+      if (durationEl) durationEl.value = "";
+      if (commentEl) commentEl.value = "";
+      if (articleEl) articleEl.value = "";
 
       refreshArretsView();
       refreshAtelierView();
@@ -648,43 +649,43 @@ function openArretFromProduction(line, duration) {
     updateArretControlsForLine();
   }
   
-  const durationEl = document.getElementById(\"arretDuration\");
-  if (durationEl) durationEl.value = duration || \"\";
+  const durationEl = document.getElementById("arretDuration");
+  if (durationEl) durationEl.value = duration || "";
   
-  showSection(\"arrets\");
+  showSection("arrets");
 }
 
 // === TABLEAU HISTORIQUE DES ARRÊTS ===
 
 function refreshArretsView() {
-  const table = document.getElementById(\"arretsHistoryTable\");
+  const table = document.getElementById("arretsHistoryTable");
   if (!table) return;
   
-  const tbody = table.querySelector(\"tbody\");
+  const tbody = table.querySelector("tbody");
   if (!tbody) return;
 
-  tbody.innerHTML = \"\";
+  tbody.innerHTML = "";
 
   state.arrets.forEach((rec, idx) => {
-    const tr = document.createElement(\"tr\");
+    const tr = document.createElement("tr");
 
     tr.innerHTML = `
       <td>${rec.dateTime}</td>
       <td>${rec.line}</td>
-      <td>${rec.sousLigne || \"-\"}</td>
+      <td>${rec.sousLigne || "-"}</td>
       <td>${rec.machine}</td>
-      <td>${rec.article || \"\"}</td>
+      <td>${rec.article || ""}</td>
       <td>${rec.duration}</td>
-      <td>${rec.comment || \"\"}</td>
-      <td><button class=\"secondary-btn\" data-idx=\"${idx}\">✕</button></td>
+      <td>${rec.comment || ""}</td>
+      <td><button class="secondary-btn" data-idx="${idx}">✕</button></td>
     `;
 
     tbody.appendChild(tr);
   });
 
   // Suppressions
-  tbody.querySelectorAll(\"button[data-idx]\").forEach(btn => {
-    btn.addEventListener(\"click\", () => {
+  tbody.querySelectorAll("button[data-idx]").forEach(btn => {
+    btn.addEventListener("click", () => {
       const i = Number(btn.dataset.idx);
       state.arrets.splice(i, 1);
       saveState();
@@ -697,44 +698,44 @@ function refreshArretsView() {
 // === ORGANISATION ===
 
 function bindOrganisationForm() {
-  const saveBtn = document.getElementById(\"orgSaveBtn\");
+  const saveBtn = document.getElementById("orgSaveBtn");
   if (!saveBtn) return;
 
-  saveBtn.addEventListener(\"click\", () => {
+  saveBtn.addEventListener("click", () => {
     const now = getNow();
 
     const rec = {
       dateTime: formatDateTime(now),
       equipe: state.currentEquipe,
-      consigne: document.getElementById(\"orgConsigne\")?.value || \"\",
-      visa: document.getElementById(\"orgVisa\")?.value || \"\",
+      consigne: document.getElementById("orgConsigne")?.value || "",
+      visa: document.getElementById("orgVisa")?.value || "",
       valide: false,
     };
 
     state.organisation.push(rec);
     saveState();
 
-    const consigneEl = document.getElementById(\"orgConsigne\");
-    const visaEl = document.getElementById(\"orgVisa\");
+    const consigneEl = document.getElementById("orgConsigne");
+    const visaEl = document.getElementById("orgVisa");
     
-    if (consigneEl) consigneEl.value = \"\";
-    if (visaEl) visaEl.value = \"\";
+    if (consigneEl) consigneEl.value = "";
+    if (visaEl) visaEl.value = "";
 
     refreshOrganisationView();
   });
 }
 
 function refreshOrganisationView() {
-  const table = document.getElementById(\"orgHistoryTable\");
+  const table = document.getElementById("orgHistoryTable");
   if (!table) return;
   
-  const tbody = table.querySelector(\"tbody\");
+  const tbody = table.querySelector("tbody");
   if (!tbody) return;
   
-  tbody.innerHTML = \"\";
+  tbody.innerHTML = "";
 
   state.organisation.forEach((rec, idx) => {
-    const tr = document.createElement(\"tr\");
+    const tr = document.createElement("tr");
 
     tr.innerHTML = `
       <td>${rec.dateTime}</td>
@@ -742,8 +743,8 @@ function refreshOrganisationView() {
       <td>${rec.consigne}</td>
       <td>${rec.visa}</td>
       <td>
-        <button class=\"secondary-btn\" data-idx=\"${idx}\">
-          ${rec.valide ? \"✅\" : \"❌\"}
+        <button class="secondary-btn" data-idx="${idx}">
+          ${rec.valide ? "✅" : "❌"}
         </button>
       </td>
     `;
@@ -751,8 +752,8 @@ function refreshOrganisationView() {
     tbody.appendChild(tr);
   });
 
-  tbody.querySelectorAll(\"button[data-idx]\").forEach(btn => {
-    btn.addEventListener(\"click\", () => {
+  tbody.querySelectorAll("button[data-idx]").forEach(btn => {
+    btn.addEventListener("click", () => {
       const i = Number(btn.dataset.idx);
       state.organisation[i].valide = !state.organisation[i].valide;
       saveState();
@@ -764,46 +765,46 @@ function refreshOrganisationView() {
 // === PERSONNEL ===
 
 function bindPersonnelForm() {
-  const saveBtn = document.getElementById(\"persSaveBtn\");
+  const saveBtn = document.getElementById("persSaveBtn");
   if (!saveBtn) return;
 
-  saveBtn.addEventListener(\"click\", () => {
+  saveBtn.addEventListener("click", () => {
     const now = getNow();
 
     const rec = {
       dateTime: formatDateTime(now),
       equipe: state.currentEquipe,
-      nom: document.getElementById(\"persNom\")?.value || \"\",
-      motif: document.getElementById(\"persMotif\")?.value || \"\",
-      comment: document.getElementById(\"persComment\")?.value || \"\",
+      nom: document.getElementById("persNom")?.value || "",
+      motif: document.getElementById("persMotif")?.value || "",
+      comment: document.getElementById("persComment")?.value || "",
     };
 
     state.personnel.push(rec);
     saveState();
 
-    const nomEl = document.getElementById(\"persNom\");
-    const motifEl = document.getElementById(\"persMotif\");
-    const commentEl = document.getElementById(\"persComment\");
+    const nomEl = document.getElementById("persNom");
+    const motifEl = document.getElementById("persMotif");
+    const commentEl = document.getElementById("persComment");
     
-    if (nomEl) nomEl.value = \"\";
-    if (motifEl) motifEl.value = \"\";
-    if (commentEl) commentEl.value = \"\";
+    if (nomEl) nomEl.value = "";
+    if (motifEl) motifEl.value = "";
+    if (commentEl) commentEl.value = "";
 
     refreshPersonnelView();
   });
 }
 
 function refreshPersonnelView() {
-  const table = document.getElementById(\"persHistoryTable\");
+  const table = document.getElementById("persHistoryTable");
   if (!table) return;
   
-  const tbody = table.querySelector(\"tbody\");
+  const tbody = table.querySelector("tbody");
   if (!tbody) return;
   
-  tbody.innerHTML = \"\";
+  tbody.innerHTML = "";
 
   state.personnel.forEach(rec => {
-    const tr = document.createElement(\"tr\");
+    const tr = document.createElement("tr");
 
     tr.innerHTML = `
       <td>${rec.dateTime}</td>
@@ -822,7 +823,7 @@ function refreshPersonnelView() {
  ********************************************/
 
 function refreshAtelierChart() {
-  const canvas = document.getElementById(\"atelierChart\");
+  const canvas = document.getElementById("atelierChart");
   if (!canvas || typeof Chart === 'undefined') return;
 
   // Détruire l'ancien graphique
@@ -871,10 +872,10 @@ function refreshAtelierChart() {
 }
 
 function refreshAtelierView() {
-  const container = document.getElementById(\"atelier-lines-summary\");
+  const container = document.getElementById("atelier-lines-summary");
   if (!container) return;
   
-  container.innerHTML = \"\";
+  container.innerHTML = "";
 
   // cartes lignes
   LINES.forEach(line => {
@@ -888,47 +889,47 @@ function refreshAtelierView() {
       : 0;
 
     const arts = new Set(recs.map(r => r.article).filter(a => a));
-    const artStr = arts.size ? [...arts].join(\", \") : \"-\";
+    const artStr = arts.size ? [...arts].join(", ") : "-";
 
-    const div = document.createElement(\"div\");
-    div.className = \"summary-card\";
+    const div = document.createElement("div");
+    div.className = "summary-card";
 
     div.innerHTML = `
-      <div class=\"summary-card-title\">${line}</div>
-      <div class=\"summary-main\">${total} colis</div>
-      <div class=\"summary-sub\">Articles : ${artStr}</div>
-      <div class=\"summary-sub\">Cadence moy. ${avg ? avg.toFixed(1) : \"-\"} h</div>
+      <div class="summary-card-title">${line}</div>
+      <div class="summary-main">${total} colis</div>
+      <div class="summary-sub">Articles : ${artStr}</div>
+      <div class="summary-sub">Cadence moy. ${avg ? avg.toFixed(1) : "-"} h</div>
     `;
 
     container.appendChild(div);
   });
 
   // Arrêts majeurs
-  const table = document.getElementById(\"atelier-arrets-table\");
+  const table = document.getElementById("atelier-arrets-table");
   if (!table) return;
   
-  const tbody = table.querySelector(\"tbody\");
+  const tbody = table.querySelector("tbody");
   if (!tbody) return;
   
-  tbody.innerHTML = \"\";
+  tbody.innerHTML = "";
 
   [...state.arrets]
     .sort((a, b) => (b.duration || 0) - (a.duration || 0))
     .forEach(rec => {
-      const tr = document.createElement(\"tr\");
+      const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${rec.line}</td>
-        <td>${rec.sousLigne || \"-\"}</td>
+        <td>${rec.sousLigne || "-"}</td>
         <td>${rec.machine}</td>
         <td>${rec.duration}</td>
-        <td>${rec.comment || \"\"}</td>
+        <td>${rec.comment || ""}</td>
       `;
       tbody.appendChild(tr);
     });
 
   // scroll horizontal ATELIER
   if (table.parentElement) {
-    table.parentElement.style.overflowX = \"auto\";
+    table.parentElement.style.overflowX = "auto";
   }
 
   // Rafraîchir le graphique
@@ -940,13 +941,13 @@ function refreshAtelierView() {
  ********************************************/
 
 function initHistoriqueEquipes() {
-  const select = document.getElementById(\"historySelect\");
+  const select = document.getElementById("historySelect");
   if (!select) return;
   
   refreshHistorySelect();
 
-  select.addEventListener(\"change\", () => {
-    if (select.value === \"\") {
+  select.addEventListener("change", () => {
+    if (select.value === "") {
       clearHistoryView();
     } else {
       const idx = Number(select.value);
@@ -958,13 +959,13 @@ function initHistoriqueEquipes() {
 }
 
 function refreshHistorySelect() {
-  const select = document.getElementById(\"historySelect\");
+  const select = document.getElementById("historySelect");
   if (!select) return;
   
-  select.innerHTML = `<option value=\"\">-- Sélectionner --</option>`;
+  select.innerHTML = `<option value="">-- Sélectionner --</option>`;
 
   archives.forEach((snap, idx) => {
-    const opt = document.createElement(\"option\");
+    const opt = document.createElement("option");
     opt.value = idx;
     opt.textContent = snap.label;
     select.appendChild(opt);
@@ -972,13 +973,13 @@ function refreshHistorySelect() {
 }
 
 function clearHistoryView() {
-  const summaryEl = document.getElementById(\"history-lines-summary\");
-  if (summaryEl) summaryEl.innerHTML = \"\";
+  const summaryEl = document.getElementById("history-lines-summary");
+  if (summaryEl) summaryEl.innerHTML = "";
 
-  const table = document.getElementById(\"history-arrets-table\");
+  const table = document.getElementById("history-arrets-table");
   if (table) {
-    const tbody = table.querySelector(\"tbody\");
-    if (tbody) tbody.innerHTML = \"\";
+    const tbody = table.querySelector("tbody");
+    if (tbody) tbody.innerHTML = "";
   }
 
   if (historyChart) {
@@ -993,9 +994,9 @@ function refreshHistoryView(snapshot) {
   const savedState = snapshot.state;
 
   // Afficher les lignes de production
-  const summaryEl = document.getElementById(\"history-lines-summary\");
+  const summaryEl = document.getElementById("history-lines-summary");
   if (summaryEl) {
-    summaryEl.innerHTML = \"\";
+    summaryEl.innerHTML = "";
 
     LINES.forEach(line => {
       const recs = savedState.production[line] || [];
@@ -1003,34 +1004,34 @@ function refreshHistoryView(snapshot) {
       const cad = recs.map(r => r.cadence).filter(c => c && c > 0);
       const avg = cad.length ? cad.reduce((s, c) => s + c) / cad.length : 0;
 
-      const div = document.createElement(\"div\");
-      div.className = \"summary-card\";
+      const div = document.createElement("div");
+      div.className = "summary-card";
       div.innerHTML = `
-        <div class=\"summary-card-title\">${line}</div>
-        <div class=\"summary-main\">${total} colis</div>
-        <div class=\"summary-sub\">Cadence moy. ${avg ? avg.toFixed(1) : \"-\"} h</div>
+        <div class="summary-card-title">${line}</div>
+        <div class="summary-main">${total} colis</div>
+        <div class="summary-sub">Cadence moy. ${avg ? avg.toFixed(1) : "-"} h</div>
       `;
       summaryEl.appendChild(div);
     });
   }
 
   // Afficher les arrêts
-  const table = document.getElementById(\"history-arrets-table\");
+  const table = document.getElementById("history-arrets-table");
   if (table) {
-    const tbody = table.querySelector(\"tbody\");
+    const tbody = table.querySelector("tbody");
     if (tbody) {
-      tbody.innerHTML = \"\";
+      tbody.innerHTML = "";
 
       (savedState.arrets || [])
         .sort((a, b) => (b.duration || 0) - (a.duration || 0))
         .forEach(rec => {
-          const tr = document.createElement(\"tr\");
+          const tr = document.createElement("tr");
           tr.innerHTML = `
             <td>${rec.line}</td>
-            <td>${rec.sousLigne || \"-\"}</td>
+            <td>${rec.sousLigne || "-"}</td>
             <td>${rec.machine}</td>
             <td>${rec.duration}</td>
-            <td>${rec.comment || \"\"}</td>
+            <td>${rec.comment || ""}</td>
           `;
           tbody.appendChild(tr);
         });
@@ -1038,7 +1039,7 @@ function refreshHistoryView(snapshot) {
   }
 
   // Graphique Chart.js
-  const chartCanvas = document.getElementById(\"historyChart\");
+  const chartCanvas = document.getElementById("historyChart");
   if (chartCanvas && typeof Chart !== 'undefined') {
     if (historyChart) historyChart.destroy();
 
@@ -1077,32 +1078,32 @@ function refreshHistoryView(snapshot) {
 
 function exportStateToExcel(srcState, filename) {
   if (typeof XLSX === 'undefined') {
-    alert(\"Bibliothèque XLSX non chargée. Impossible d'exporter.\");
-    console.error(\"XLSX library not found.\");
+    alert("Bibliothèque XLSX non chargée. Impossible d'exporter.");
+    console.error("XLSX library not found.");
     return;
   }
 
   const wb = XLSX.utils.book_new();
 
   const rows = [[
-    \"Type\",
-    \"Date/Heure\",
-    \"Équipe\",
-    \"Ligne\",
-    \"Sous-ligne\",
-    \"Machine\",
-    \"Début\",
-    \"Fin\",
-    \"Qté\",
-    \"Arrêt (min)\",
-    \"Cadence\",
-    \"Temps restant\",
-    \"Commentaire\",
-    \"Article\",
-    \"Nom personnel\",
-    \"Motif personnel\",
-    \"Visa organisation\",
-    \"Validée organisation\"
+    "Type",
+    "Date/Heure",
+    "Équipe",
+    "Ligne",
+    "Sous-ligne",
+    "Machine",
+    "Début",
+    "Fin",
+    "Qté",
+    "Arrêt (min)",
+    "Cadence",
+    "Temps restant",
+    "Commentaire",
+    "Article",
+    "Nom personnel",
+    "Motif personnel",
+    "Visa organisation",
+    "Validée organisation"
   ]];
 
   // PRODUCTION
@@ -1110,24 +1111,24 @@ function exportStateToExcel(srcState, filename) {
     const recs = srcState.production[line] || [];
     recs.forEach(r => {
       rows.push([
-        \"PRODUCTION\",
+        "PRODUCTION",
         r.dateTime,
         r.equipe,
         line,
-        \"\",
-        \"\",
-        r.start || \"\",
-        r.end || \"\",
-        r.quantity || \"\",
-        r.arret || \"\",
-        r.cadence || \"\",
-        r.remainingTime || \"\",
-        r.comment || \"\",
-        r.article || \"\",
-        \"\",
-        \"\",
-        \"\",
-        \"\"
+        "",
+        "",
+        r.start || "",
+        r.end || "",
+        r.quantity || "",
+        r.arret || "",
+        r.cadence || "",
+        r.remainingTime || "",
+        r.comment || "",
+        r.article || "",
+        "",
+        "",
+        "",
+        ""
       ]);
     });
   });
@@ -1135,89 +1136,89 @@ function exportStateToExcel(srcState, filename) {
   // ARRETS
   srcState.arrets.forEach(r => {
     rows.push([
-      \"ARRET\",
+      "ARRET",
       r.dateTime,
-      \"\",
+      "",
       r.line,
-      r.sousLigne || \"\",
-      r.machine || \"\",
-      \"\",
-      \"\",
-      \"\",
-      r.duration || \"\",
-      \"\",
-      \"\",
-      r.comment || \"\",
-      r.article || \"\",
-      \"\",
-      \"\",
-      \"\",
-      \"\"
+      r.sousLigne || "",
+      r.machine || "",
+      "",
+      "",
+      "",
+      r.duration || "",
+      "",
+      "",
+      r.comment || "",
+      r.article || "",
+      "",
+      "",
+      "",
+      ""
     ]);
   });
 
   // ORGANISATION
   srcState.organisation.forEach(r => {
     rows.push([
-      \"ORGANISATION\",
+      "ORGANISATION",
       r.dateTime,
       r.equipe,
-      \"\",
-      \"\",
-      \"\",
-      \"\",
-      \"\",
-      \"\",
-      \"\",
-      \"\",
-      \"\",
-      r.consigne || \"\",
-      \"\",
-      \"\",
-      \"\",
-      r.visa || \"\",
-      r.valide ? \"Oui\" : \"Non\"
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      r.consigne || "",
+      "",
+      "",
+      "",
+      r.visa || "",
+      r.valide ? "Oui" : "Non"
     ]);
   });
 
   // PERSONNEL
   srcState.personnel.forEach(r => {
     rows.push([
-      \"PERSONNEL\",
+      "PERSONNEL",
       r.dateTime,
       r.equipe,
-      \"\",
-      \"\",
-      \"\",
-      \"\",
-      \"\",
-      \"\",
-      \"\",
-      \"\",
-      \"\",
-      r.comment || \"\",
-      \"\",
-      r.nom || \"\",
-      r.motif || \"\",
-      \"\",
-      \"\"
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      r.comment || "",
+      "",
+      r.nom || "",
+      r.motif || "",
+      "",
+      ""
     ]);
   });
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  XLSX.utils.book_append_sheet(wb, ws, \"GLOBAL\");
+  XLSX.utils.book_append_sheet(wb, ws, "GLOBAL");
   XLSX.writeFile(wb, filename);
 }
 
 function bindExportGlobal() {
-  const btn = document.getElementById(\"exportGlobalBtn\");
+  const btn = document.getElementById("exportGlobalBtn");
   if (!btn) return;
 
-  btn.addEventListener(\"click\", () => {
+  btn.addEventListener("click", () => {
     const now = getNow();
-    const hh = String(now.getHours()).padStart(2, \"0\");
-    const mm = String(now.getMinutes()).padStart(2, \"0\");
-    const ss = String(now.getSeconds()).padStart(2, \"0\");
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    const ss = String(now.getSeconds()).padStart(2, "0");
 
     const filename = `Atelier_PPNC_${hh}h${mm}_${ss}.xlsx`;
     exportStateToExcel(state, filename);
@@ -1229,27 +1230,27 @@ function bindExportGlobal() {
  ********************************************/
 
 function bindRAZEquipe() {
-  const btn = document.getElementById(\"razBtn\");
+  const btn = document.getElementById("razBtn");
   if (!btn) return;
 
-  btn.addEventListener(\"click\", () => {
-    if (!confirm(\"RAZ + changement d'équipe + export ?\")) return;
+  btn.addEventListener("click", () => {
+    if (!confirm("RAZ + changement d'équipe + export ?")) return;
 
     const now = getNow();
     const week = getWeekNumber(now);
     const quantieme = getQuantieme(now);
-    const hh = String(now.getHours()).padStart(2, \"0\");
-    const mm = String(now.getMinutes()).padStart(2, \"0\");
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
 
     let finished = prompt(
-      \"Quelle équipe vient de finir ? (M, AM, N)\",
+      "Quelle équipe vient de finir ? (M, AM, N)",
       state.currentEquipe
     );
     if (!finished) return;
     finished = finished.toUpperCase().trim();
 
-    if (![\"M\", \"AM\", \"N\"].includes(finished)) {
-      alert(\"Équipe invalide.\");
+    if (!["M", "AM", "N"].includes(finished)) {
+      alert("Équipe invalide.");
       return;
     }
 
@@ -1271,10 +1272,10 @@ function bindRAZEquipe() {
       `Atelier_EQ${finished}_Q${quantieme}_S${week}_${hh}h${mm}.xlsx`;
     exportStateToExcel(snap.state, filename);
 
-    let next = \"M\";
-    if (finished === \"M\") next = \"AM\";
-    else if (finished === \"AM\") next = \"N\";
-    else next = \"M\";
+    let next = "M";
+    if (finished === "M") next = "AM";
+    else if (finished === "AM") next = "N";
+    else next = "M";
 
     state.currentEquipe = next;
 
@@ -1303,39 +1304,39 @@ function bindRAZEquipe() {
  ********************************************/
 
 function bindDDM() {
-  const calcBtn = document.getElementById(\"ddmCalcBtn\");
+  const calcBtn = document.getElementById("ddmCalcBtn");
   if (!calcBtn) return;
 
   // Pré-remplir avec l'année courante
-  const anneeEl = document.getElementById(\"ddmAnnee\");
+  const anneeEl = document.getElementById("ddmAnnee");
   if (anneeEl && !anneeEl.value) {
     anneeEl.value = getNow().getFullYear();
   }
 
-  calcBtn.addEventListener(\"click\", () => {
-    const quantieme = Number(document.getElementById(\"ddmQuantieme\")?.value);
-    const annee = Number(document.getElementById(\"ddmAnnee\")?.value);
-    const duree = Number(document.getElementById(\"ddmDuree\")?.value);
+  calcBtn.addEventListener("click", () => {
+    const quantieme = Number(document.getElementById("ddmQuantieme")?.value);
+    const annee = Number(document.getElementById("ddmAnnee")?.value);
+    const duree = Number(document.getElementById("ddmDuree")?.value);
 
-    const resultEl = document.getElementById(\"ddmResult\");
+    const resultEl = document.getElementById("ddmResult");
     if (!resultEl) return;
 
     // Validation
     if (!quantieme || quantieme < 1 || quantieme > 366) {
-      resultEl.textContent = \"Quantième invalide (1-366)\";
-      resultEl.style.color = \"red\";
+      resultEl.textContent = "Quantième invalide (1-366)";
+      resultEl.style.color = "red";
       return;
     }
 
     if (!annee || annee < 2000 || annee > 2100) {
-      resultEl.textContent = \"Année invalide\";
-      resultEl.style.color = \"red\";
+      resultEl.textContent = "Année invalide";
+      resultEl.style.color = "red";
       return;
     }
 
     if (!duree || duree < 0) {
-      resultEl.textContent = \"Durée invalide\";
-      resultEl.style.color = \"red\";
+      resultEl.textContent = "Durée invalide";
+      resultEl.style.color = "red";
       return;
     }
 
@@ -1348,7 +1349,7 @@ function bindDDM() {
     const quantiemeDDM = getQuantieme(dateDDM);
 
     resultEl.textContent = `${ddmStr} (Quantième ${quantiemeDDM})`;
-    resultEl.style.color = \"green\";
+    resultEl.style.color = "green";
   });
 }
 
@@ -1357,14 +1358,14 @@ function bindDDM() {
  ********************************************/
 
 function initCalculator() {
-  const calcWidget = document.getElementById(\"calculator\");
-  const calcToggle = document.getElementById(\"calcToggle\");
-  const calcClose = document.getElementById(\"calcCloseBtn\");
-  const calcDisplay = document.getElementById(\"calcDisplay\");
+  const calcWidget = document.getElementById("calculator");
+  const calcToggle = document.getElementById("calcToggle");
+  const calcClose = document.getElementById("calcCloseBtn");
+  const calcDisplay = document.getElementById("calcDisplay");
 
   if (!calcWidget || !calcToggle || !calcClose || !calcDisplay) return;
 
-  let currentValue = \"0\";
+  let currentValue = "0";
   let operator = null;
   let previousValue = null;
   let waitingForOperand = false;
@@ -1374,7 +1375,7 @@ function initCalculator() {
   }
 
   function clear() {
-    currentValue = \"0\";
+    currentValue = "0";
     operator = null;
     previousValue = null;
     waitingForOperand = false;
@@ -1386,17 +1387,17 @@ function initCalculator() {
       currentValue = String(digit);
       waitingForOperand = false;
     } else {
-      currentValue = currentValue === \"0\" ? String(digit) : currentValue + digit;
+      currentValue = currentValue === "0" ? String(digit) : currentValue + digit;
     }
     updateDisplay();
   }
 
   function inputDecimal() {
     if (waitingForOperand) {
-      currentValue = \"0.\";
+      currentValue = "0.";
       waitingForOperand = false;
-    } else if (currentValue.indexOf(\".\") === -1) {
-      currentValue += \".\";
+    } else if (currentValue.indexOf(".") === -1) {
+      currentValue += ".";
     }
     updateDisplay();
   }
@@ -1419,40 +1420,40 @@ function initCalculator() {
 
   function calculate(prev, current, op) {
     switch (op) {
-      case \"+\": return prev + current;
-      case \"-\": return prev - current;
-      case \"*\": return prev * current;
-      case \"/\": return current !== 0 ? prev / current : 0;
+      case "+": return prev + current;
+      case "-": return prev - current;
+      case "*": return prev * current;
+      case "/": return current !== 0 ? prev / current : 0;
       default: return current;
     }
   }
 
   // Toggle affichage
-  calcToggle.addEventListener(\"click\", () => {
-    calcWidget.classList.toggle(\"hidden\");
+  calcToggle.addEventListener("click", () => {
+    calcWidget.classList.toggle("hidden");
   });
 
-  calcClose.addEventListener(\"click\", () => {
-    calcWidget.classList.add(\"hidden\");
+  calcClose.addEventListener("click", () => {
+    calcWidget.classList.add("hidden");
   });
 
   // Boutons calculatrice
-  document.querySelectorAll(\".calc-btn\").forEach(btn => {
-    btn.addEventListener(\"click\", () => {
+  document.querySelectorAll(".calc-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
       const value = btn.dataset.value;
       const action = btn.dataset.action;
 
       if (value && !action) {
-        if (value === \".\") {
+        if (value === ".") {
           inputDecimal();
-        } else if ([\"+\", \"-\", \"*\", \"/\"].includes(value)) {
+        } else if (["+", "-", "*", "/"].includes(value)) {
           performOperation(value);
         } else {
           inputDigit(value);
         }
-      } else if (action === \"clear\") {
+      } else if (action === "clear") {
         clear();
-      } else if (action === \"equals\") {
+      } else if (action === "equals") {
         performOperation(null);
         operator = null;
         waitingForOperand = true;
@@ -1468,21 +1469,21 @@ function initCalculator() {
  ********************************************/
 
 function initTheme() {
-  const btn = document.getElementById(\"themeToggleBtn\");
+  const btn = document.getElementById("themeToggleBtn");
   if (!btn) return;
 
-  const saved = localStorage.getItem(\"themeMode\");
-  if (saved === \"light\") {
-    document.body.classList.add(\"light-mode\");
+  const saved = localStorage.getItem("themeMode");
+  if (saved === "light") {
+    document.body.classList.add("light-mode");
   }
 
-  btn.addEventListener(\"click\", () => {
-    document.body.classList.toggle(\"light-mode\");
+  btn.addEventListener("click", () => {
+    document.body.classList.toggle("light-mode");
 
-    if (document.body.classList.contains(\"light-mode\")) {
-      localStorage.setItem(\"themeMode\", \"light\");
+    if (document.body.classList.contains("light-mode")) {
+      localStorage.setItem("themeMode", "light");
     } else {
-      localStorage.setItem(\"themeMode\", \"dark\");
+      localStorage.setItem("themeMode", "dark");
     }
   });
 }
@@ -1493,14 +1494,14 @@ function initTheme() {
 
 function updateOrientationLayout() {
   const isLandscape = window.innerWidth > window.innerHeight;
-  document.body.classList.toggle(\"is-landscape\", isLandscape);
+  document.body.classList.toggle("is-landscape", isLandscape);
 }
 
 /********************************************
  *   INIT GLOBALE
  ********************************************/
 
-document.addEventListener(\"DOMContentLoaded\", () => {
+document.addEventListener("DOMContentLoaded", () => {
   loadState();
   loadArchives();
   initHeaderDate();
@@ -1518,9 +1519,9 @@ document.addEventListener(\"DOMContentLoaded\", () => {
   initTheme();
 
   updateOrientationLayout();
-  window.addEventListener(\"resize\", updateOrientationLayout);
-  window.addEventListener(\"orientationchange\", updateOrientationLayout);
+  window.addEventListener("resize", updateOrientationLayout);
+  window.addEventListener("orientationchange", updateOrientationLayout);
 
-  showSection(state.currentSection || \"atelier\");
+  showSection(state.currentSection || "atelier");
 });
-"
+
