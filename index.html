@@ -93,15 +93,21 @@
         </div>
 
         <div class="card">
-          <h3>Export Excel global</h3>
+          <h3>Export Excel</h3>
           <p class="helper-text">
-            Exporte Production, Arrêts, Organisation, Personnel dans un seul fichier.
+            Export pour présentation en réunion (5 onglets : Synthèse, Production, Arrêts, Organisation, Personnel).
           </p>
 
-          <button id="exportGlobalBtn" class="primary-btn">📤 Export global Excel</button>
+          <button id="exportPresentationBtn" class="primary-btn" style="margin-bottom: 15px;">
+            📈 Export PRÉSENTATION
+          </button>
 
-          <button id="razBtn" class="danger-btn" style="margin-top:10px;">
-            RAZ équipe (export + reset)
+          <p class="helper-text" style="margin-top: 20px;">
+            RAZ d'équipe : exporte DATA + PRÉSENTATION de l'équipe finissante, puis reset complet.
+          </p>
+
+          <button id="razBtn" class="danger-btn">
+            🔄 RAZ équipe (double export + reset)
           </button>
         </div>
       </div>
