@@ -2,8 +2,8 @@
   "name": "Atelier PPNC",
   "short_name": "Atelier PPNC",
   "description": "Application de suivi de production et arrêts pour l'atelier PPNC",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#005bff",
@@ -25,4 +25,3 @@
     }
   ]
 }
-
