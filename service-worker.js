@@ -46,6 +46,21 @@ self.addEventListener("activate", (event) => {
 
 // Stratégie de cache: Cache First, puis Network
 self.addEventListener("fetch", (event) => {
+  // 🔹 AJOUT IMPORTANT : gérer les navigations (lancement du PWA, changements d'URL)
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      caches.match("./index.html").then((cachedPage) => {
+        if (cachedPage) {
+          return cachedPage;
+        }
+        // si pas en cache (premier lancement en ligne) → réseau
+        return fetch(event.request);
+      })
+    );
+    return;
+  }
+
+  // 🔹 Le reste de ton code inchangé
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
@@ -85,4 +100,3 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
-
