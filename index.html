@@ -37,6 +37,7 @@
     <div class="app-title">
       <span class="app-main-title">Atelier PPNC</span>
       <span class="app-sub-title">Suivi Production & Arrêts</span>
+      <span class="local-badge" title="Données stockées uniquement sur cet appareil, sans synchronisation externe">Mode hors ligne · Données locales</span>
     </div>
     <div class="header-info" id="header-datetime">
       <!-- injecté JS -->
@@ -60,6 +61,7 @@
     <button class="nav-btn" data-section="personnel">Personnel</button>
     <button class="nav-btn" data-section="validation">Validation DDM</button>
     <button class="nav-btn" data-section="historique">Historique équipes</button>
+    <button class="nav-btn" data-section="manager">Manager (base dédiée)</button>
   </nav>
 
   <main>
@@ -71,6 +73,34 @@
         <div class="card">
           <h3>Production par ligne (aujourd'hui)</h3>
           <div id="atelier-lines-summary"></div>
+        </div>
+
+        <div class="card">
+          <h3>Mise à jour Excel</h3>
+          <p class="helper-text">
+            Charge un ou plusieurs fichiers du type <strong>Atelier_DATA_EQN_Qxxx_Sxx_hhmm.xlsx</strong>. Pas de limite à 3 fichiers ni à un seul import par jour.
+          </p>
+
+          <div class="import-actions">
+            <input type="file" id="excelInput" accept=".xlsx,.xls" multiple />
+            <button id="importExcelBtn" class="primary-btn">📥 Mise à jour</button>
+          </div>
+
+          <div id="importStatus" class="import-status helper-text"></div>
+
+          <div class="table-wrapper-horizontal">
+            <table class="table" id="importsTable">
+              <thead>
+                <tr>
+                  <th>Fichier</th>
+                  <th>Q / S / Heure</th>
+                  <th>Enregistrements</th>
+                  <th>Importé le</th>
+                </tr>
+              </thead>
+              <tbody id="importsTableBody"></tbody>
+            </table>
+          </div>
         </div>
 
         <div class="card">
@@ -116,6 +146,52 @@
           <button id="razBtn" class="danger-btn">
             🔄 RAZ équipe (double export + reset)
           </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Recherche dans les imports Excel</h3>
+        <div class="form-grid import-filters">
+          <div class="form-group">
+            <label for="importSearchInput">Recherche texte</label>
+            <input type="text" id="importSearchInput" placeholder="Article, machine, commentaire..." />
+          </div>
+          <div class="form-group">
+            <label for="importEquipeFilter">Équipe</label>
+            <select id="importEquipeFilter">
+              <option value="">Toutes</option>
+              <option value="M">M</option>
+              <option value="AM">AM</option>
+              <option value="N">N</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="importLineFilter">Ligne</label>
+            <select id="importLineFilter">
+              <option value="">Toutes les lignes</option>
+            </select>
+          </div>
+        </div>
+
+        <p class="helper-text" id="importResultsCount"></p>
+
+        <div class="table-wrapper-horizontal">
+          <table class="table" id="importResultsTable">
+            <thead>
+              <tr>
+                <th>Date/Heure</th>
+                <th>Équipe</th>
+                <th>Ligne</th>
+                <th>Machine</th>
+                <th>Quantité</th>
+                <th>Arrêt (min)</th>
+                <th>Cadence</th>
+                <th>Commentaire</th>
+                <th>Fichier</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -471,6 +547,141 @@
           </thead>
           <tbody></tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- PAGE MANAGER (base dédiée) -->
+    <section id="section-manager" class="section">
+      <h2>Base manager (indépendante & locale)</h2>
+      <p class="helper-text">
+        Importe les fichiers Excel et recopie toutes les lignes dans un classeur unique généré par l'application. La
+        recherche parcourt l'intégralité de l'historique stocké dans ce classeur, sans dépendance réseau.
+      </p>
+
+      <div class="card" id="managerSecurityCard">
+        <h3>Accès manager sécurisé</h3>
+        <p class="helper-text">
+          Configure un mot de passe local pour protéger l'espace manager. Le mot de passe reste sur cet appareil et peut
+          être changé à tout moment.
+        </p>
+        <div class="manager-security-grid">
+          <form id="managerUnlockForm" class="manager-security-form">
+            <label for="managerUnlockInput">Mot de passe</label>
+            <div class="manager-security-actions">
+              <input type="password" id="managerUnlockInput" placeholder="Saisis le mot de passe" />
+              <button type="submit" class="primary-btn">🔓 Déverrouiller</button>
+            </div>
+          </form>
+
+          <form id="managerSetPasswordForm" class="manager-security-form">
+            <label for="managerPasswordInput">Nouveau mot de passe</label>
+            <div class="manager-security-actions">
+              <input type="password" id="managerPasswordInput" placeholder="Définis ou change le mot de passe" />
+              <button type="submit" class="secondary-btn">💾 Enregistrer</button>
+            </div>
+          </form>
+        </div>
+        <div id="managerSecurityStatus" class="import-status helper-text"></div>
+      </div>
+
+      <div class="manager-locked" id="managerLockedOverlay">
+        <p>Accès manager verrouillé. Définis ou saisis le mot de passe pour afficher les données.</p>
+      </div>
+
+      <div class="manager-grid" id="managerContent">
+        <div class="card">
+          <h3>Import vers la base manager</h3>
+          <p class="helper-text">
+            Les fichiers peuvent arriver à tout moment (jusqu'à plusieurs par équipe). Aucun prérequis de nombre ou de
+            plage horaire.
+          </p>
+          <div class="import-actions">
+            <input type="file" id="managerExcelInput" accept=".xlsx,.xls" multiple />
+            <button id="managerImportBtn" class="primary-btn">📥 Importer dans la base</button>
+            <button id="managerExportBtn" class="secondary-btn" title="Télécharger le classeur historisé">📑 Export Excel</button>
+            <button id="managerResetBtn" class="danger-btn" title="Effacer la base manager (pas les autres formulaires)">🗑️ Vider la base</button>
+          </div>
+          <div id="managerImportStatus" class="import-status helper-text"></div>
+
+          <div class="table-wrapper-horizontal" style="margin-top: 12px;">
+            <table class="table" id="managerImportsTable">
+              <thead>
+                <tr>
+                  <th>Fichier</th>
+                  <th>Q/S/Heure</th>
+                  <th>Lignes</th>
+                  <th>Importé le</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Recherche et tri</h3>
+          <div class="form-grid import-filters">
+            <div class="form-group">
+              <label for="managerSearchInput">Recherche texte</label>
+              <input type="text" id="managerSearchInput" placeholder="Tape ici pour chercher dans la base" />
+            </div>
+            <div class="form-group">
+              <label for="managerEquipeFilter">Équipe</label>
+              <select id="managerEquipeFilter">
+                <option value="">Toutes</option>
+                <option value="M">M</option>
+                <option value="AM">AM</option>
+                <option value="N">N</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="managerLineFilter">Ligne</label>
+              <select id="managerLineFilter">
+                <option value="">Toutes</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="managerSortField">Tri</label>
+              <select id="managerSortField"></select>
+            </div>
+            <div class="form-group">
+              <label for="managerSortDir">Ordre</label>
+              <select id="managerSortDir">
+                <option value="desc">Décroissant</option>
+                <option value="asc">Croissant</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field-selector" id="managerFieldSelector"></div>
+          <p class="helper-text" id="managerResultsCount"></p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Résultats (base manager)</h3>
+        <div class="table-wrapper-horizontal">
+          <table class="table" id="managerResultsTable">
+            <thead>
+              <tr>
+                <th>Date/Heure</th>
+                <th>Équipe</th>
+                <th>Ligne</th>
+                <th>Sous-ligne</th>
+                <th>Machine</th>
+                <th>Quantité</th>
+                <th>Arrêt (min)</th>
+                <th>Cadence</th>
+                <th>Commentaire</th>
+                <th>Article</th>
+                <th>Personnel</th>
+                <th>Motif</th>
+                <th>Fichier</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </section>
 

@@ -69,6 +69,8 @@ let state = {
   arrets: [],
   organisation: [],
   personnel: [],
+  excelRecords: [],
+  excelFiles: [],
   formDraft: {},
 };
 
@@ -81,6 +83,75 @@ let arretMachineEl = null;
 // Graphiques
 let atelierChart = null;
 let historyChart = null;
+
+// Base manager (classeur Excel historisé)
+const MANAGER_MASTER_KEY = "manager_master_excel_b64";
+const MANAGER_IMPORT_LOG_KEY = "manager_import_log_v1";
+const MANAGER_PASSWORD_KEY = "manager_password_hash_v1";
+
+const MANAGER_FIELDS = [
+  { key: "type", label: "Type" },
+  { key: "dateHeure", label: "Date/Heure" },
+  { key: "equipe", label: "Équipe" },
+  { key: "ligne", label: "Ligne" },
+  { key: "sousLigne", label: "Sous-ligne" },
+  { key: "machine", label: "Machine" },
+  { key: "heureDebut", label: "Heure Début" },
+  { key: "heureFin", label: "Heure Fin" },
+  { key: "quantite", label: "Quantité" },
+  { key: "arretMinutes", label: "Arrêt (min)" },
+  { key: "cadence", label: "Cadence" },
+  { key: "tempsRestant", label: "Temps Restant" },
+  { key: "commentaire", label: "Commentaire" },
+  { key: "article", label: "Article" },
+  { key: "nomPersonnel", label: "Personnel" },
+  { key: "motifPersonnel", label: "Motif personnel" },
+  { key: "visa", label: "Visa" },
+  { key: "validee", label: "Validée" },
+  { key: "fileName", label: "Fichier" },
+  { key: "quantieme", label: "Quantième" },
+  { key: "semaine", label: "Semaine" },
+  { key: "heureFichier", label: "Heure fichier" },
+];
+
+const MANAGER_COLUMNS_FOR_EXCEL = [
+  { key: "type", header: "Type" },
+  { key: "dateHeure", header: "Date/Heure" },
+  { key: "equipe", header: "Équipe" },
+  { key: "ligne", header: "Ligne" },
+  { key: "sousLigne", header: "Sous-ligne" },
+  { key: "machine", header: "Machine" },
+  { key: "heureDebut", header: "Heure Début" },
+  { key: "heureFin", header: "Heure Fin" },
+  { key: "quantite", header: "Quantité" },
+  { key: "arretMinutes", header: "Arrêt (min)" },
+  { key: "cadence", header: "Cadence" },
+  { key: "tempsRestant", header: "Temps Restant" },
+  { key: "commentaire", header: "Commentaire" },
+  { key: "article", header: "Article" },
+  { key: "nomPersonnel", header: "Nom Personnel" },
+  { key: "motifPersonnel", header: "Motif Personnel" },
+  { key: "visa", header: "Visa" },
+  { key: "validee", header: "Validée" },
+  { key: "fileName", header: "Fichier source" },
+  { key: "quantieme", header: "Quantième" },
+  { key: "semaine", header: "Semaine" },
+  { key: "heureFichier", header: "Heure du fichier" },
+  { key: "importedAt", header: "Importé le" },
+];
+
+const managerSearchState = {
+  text: "",
+  equipe: "",
+  ligne: "",
+  fields: new Set(MANAGER_FIELDS.map(f => f.key)),
+  sortField: "dateHeure",
+  sortDir: "desc",
+};
+
+let managerDataset = [];
+let managerImportLog = [];
+let managerUnlocked = false;
 
 /******************************
  *   PARTIE 1 / 4 – FONCTIONS DATE
@@ -163,6 +234,8 @@ function loadState() {
       arrets: [],
       organisation: [],
       personnel: [],
+      excelRecords: [],
+      excelFiles: [],
       formDraft: {},
     };
 
@@ -172,6 +245,9 @@ function loadState() {
       if (!state.production[l]) state.production[l] = [];
       if (!state.formDraft[l]) state.formDraft[l] = {};
     });
+
+    if (!state.excelRecords) state.excelRecords = [];
+    if (!state.excelFiles) state.excelFiles = [];
 
   } catch (e) {
     console.error("loadState error", e);
@@ -200,6 +276,820 @@ function saveArchives() {
   try {
     localStorage.setItem(ARCHIVES_KEY, JSON.stringify(archives));
   } catch {}
+}
+
+/******************************
+ *   PARTIE 1B – IMPORT EXCEL
+ ******************************/
+
+function generateId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function parseFileNameInfo(fileName) {
+  const match = fileName.match(/Q(\d{3}).*?S(\d{2}).*?(\d{2})h(\d{2})/i);
+  if (!match) return { fileName, quantieme: null, semaine: null, heureFichier: null, formattedDate: null };
+
+  const quantieme = Number(match[1]);
+  const semaine = Number(match[2]);
+  const heureFichier = `${match[3]}:${match[4]}`;
+
+  let formattedDate = null;
+  try {
+    const year = new Date().getFullYear();
+    const date = quantiemeToDate(quantieme, year);
+    formattedDate = formatDateDDM(date);
+  } catch {
+    formattedDate = null;
+  }
+
+  return { fileName, quantieme, semaine, heureFichier, formattedDate };
+}
+
+function normalizeExcelRow(row, meta) {
+  const getStr = (...keys) => {
+    for (const key of keys) {
+      if (row[key] !== undefined && row[key] !== null) {
+        return String(row[key]).trim();
+      }
+    }
+    return "";
+  };
+
+  const getNum = (...keys) => {
+    for (const key of keys) {
+      if (row[key] === undefined || row[key] === null || row[key] === "") continue;
+      const num = Number(row[key]);
+      if (!Number.isNaN(num)) return num;
+    }
+    return null;
+  };
+
+  return {
+    id: generateId(),
+    fileName: meta.fileName,
+    importedAt: meta.importedAt,
+    quantieme: meta.quantieme,
+    semaine: meta.semaine,
+    heureFichier: meta.heureFichier,
+    fichierDate: meta.formattedDate,
+    type: getStr("Type"),
+    dateHeure: getStr("Date/Heure", "Date", "Heure"),
+    equipe: getStr("Équipe", "Equipe"),
+    ligne: getStr("Ligne"),
+    sousLigne: getStr("Sous-ligne", "Sous ligne", "Sous_ligne"),
+    machine: getStr("Machine"),
+    heureDebut: getStr("Heure Début", "Heure debut"),
+    heureFin: getStr("Heure Fin"),
+    quantite: getNum("Quantité", "Quantite"),
+    arretMinutes: getNum("Arrêt (min)", "Arret (min)", "Arrêt"),
+    cadence: getNum("Cadence"),
+    tempsRestant: getNum("Temps Restant"),
+    commentaire: getStr("Commentaire"),
+    article: getStr("Article"),
+    nomPersonnel: getStr("Nom Personnel"),
+    motifPersonnel: getStr("Motif Personnel"),
+    visa: getStr("Visa"),
+    validee: getStr("Validée", "Validee"),
+  };
+}
+
+function setImportStatus(message, variant = "") {
+  const el = document.getElementById("importStatus");
+  if (!el) return;
+  el.textContent = message;
+  el.className = "import-status helper-text";
+  if (variant) {
+    el.classList.add(variant);
+  }
+}
+
+async function processExcelFile(file) {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array" });
+  const firstSheet = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[firstSheet];
+  const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+  const meta = { ...parseFileNameInfo(file.name), fileName: file.name, importedAt: new Date().toISOString() };
+
+  const normalizedRows = rawRows
+    .filter(row => Object.values(row).some(v => v !== null && v !== ""))
+    .map(row => normalizeExcelRow(row, meta));
+
+  if (!normalizedRows.length) return { count: 0 };
+
+  state.excelRecords.push(...normalizedRows);
+  state.excelFiles.push({
+    id: generateId(),
+    fileName: file.name,
+    importedAt: meta.importedAt,
+    quantieme: meta.quantieme,
+    semaine: meta.semaine,
+    heureFichier: meta.heureFichier,
+    fichierDate: meta.formattedDate,
+    rowCount: normalizedRows.length,
+  });
+
+  saveState();
+  return { count: normalizedRows.length };
+}
+
+async function importExcelFiles(files) {
+  if (!files.length) {
+    setImportStatus("Sélectionne au moins un fichier Excel.", "warning");
+    return;
+  }
+
+  let totalRows = 0;
+  const skipped = [];
+
+  for (const file of files) {
+    if (state.excelFiles.some(f => f.fileName === file.name)) {
+      skipped.push(file.name);
+      continue;
+    }
+
+    try {
+      const { count } = await processExcelFile(file);
+      totalRows += count;
+    } catch (e) {
+      console.error("Import excel error", e);
+      setImportStatus(`Erreur sur ${file.name} : ${e.message || e}`, "error");
+    }
+  }
+
+  if (totalRows > 0 || skipped.length) {
+    const parts = [];
+    if (totalRows > 0) parts.push(`${totalRows} ligne(s) ajoutée(s)`);
+    if (skipped.length) parts.push(`fichiers ignorés (déjà importés) : ${skipped.join(", ")}`);
+    const variant = totalRows > 0 ? "success" : "warning";
+    setImportStatus(`Import terminé : ${parts.join(" • ")}`, variant);
+  } else {
+    setImportStatus("Aucune ligne importée.", "warning");
+  }
+
+  refreshImportLog();
+  refreshImportSearch();
+}
+
+/********************************************
+ *   PARTIE 1B – BASE MANAGER (CLASSEUR EXCEL)
+ ********************************************/
+
+let managerSignatureSet = new Set();
+
+function setManagerStatus(message, variant = "") {
+  const el = document.getElementById("managerImportStatus");
+  if (!el) return;
+  el.textContent = message;
+  el.className = "import-status helper-text";
+  if (variant) el.classList.add(variant);
+}
+
+function setManagerSecurityStatus(message, variant = "") {
+  const el = document.getElementById("managerSecurityStatus");
+  if (!el) return;
+  el.textContent = message;
+  el.className = "import-status helper-text";
+  if (variant) el.classList.add(variant);
+}
+
+function recordToSheetRow(rec) {
+  const row = {};
+  MANAGER_COLUMNS_FOR_EXCEL.forEach(col => {
+    row[col.header] = rec[col.key] ?? "";
+  });
+  return row;
+}
+
+function sheetRowToRecord(row) {
+  const rec = {};
+  MANAGER_COLUMNS_FOR_EXCEL.forEach(col => {
+    rec[col.key] = row[col.header] ?? "";
+  });
+  return rec;
+}
+
+function persistManagerWorkbook() {
+  try {
+    const rows = managerDataset.map(recordToSheetRow);
+    const ws = XLSX.utils.json_to_sheet(rows, { header: MANAGER_COLUMNS_FOR_EXCEL.map(c => c.header) });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Historique");
+    const b64 = XLSX.write(wb, { bookType: "xlsx", type: "base64" });
+    localStorage.setItem(MANAGER_MASTER_KEY, b64);
+  } catch (e) {
+    console.error("Persist manager workbook failed", e);
+  }
+}
+
+function loadManagerWorkbookFromStorage() {
+  managerDataset = [];
+  managerSignatureSet = new Set();
+  const b64 = localStorage.getItem(MANAGER_MASTER_KEY);
+  if (!b64) return;
+  try {
+    const wb = XLSX.read(b64, { type: "base64" });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    managerDataset = rows.map(sheetRowToRecord);
+    managerDataset.forEach(r => managerSignatureSet.add(getManagerSignature(r)));
+  } catch (e) {
+    console.error("Lecture du classeur manager impossible", e);
+  }
+}
+
+function loadManagerImportLog() {
+  try {
+    const raw = localStorage.getItem(MANAGER_IMPORT_LOG_KEY);
+    managerImportLog = raw ? JSON.parse(raw) : [];
+  } catch {
+    managerImportLog = [];
+  }
+}
+
+function saveManagerImportLog() {
+  localStorage.setItem(MANAGER_IMPORT_LOG_KEY, JSON.stringify(managerImportLog));
+}
+
+async function hashPassword(pwd) {
+  const enc = new TextEncoder().encode(pwd);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", enc);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function getStoredPasswordHash() {
+  return localStorage.getItem(MANAGER_PASSWORD_KEY);
+}
+
+async function verifyManagerPassword(pwd) {
+  const stored = getStoredPasswordHash();
+  if (!stored) return true; // aucun mot de passe configuré
+  const hashed = await hashPassword(pwd);
+  return hashed === stored;
+}
+
+async function setManagerPassword(pwd) {
+  if (!pwd || pwd.length < 4) {
+    setManagerSecurityStatus("Choisis un mot de passe d'au moins 4 caractères.", "warning");
+    return false;
+  }
+  const hashed = await hashPassword(pwd);
+  localStorage.setItem(MANAGER_PASSWORD_KEY, hashed);
+  setManagerSecurityStatus("Mot de passe enregistré localement.", "success");
+  return true;
+}
+
+function updateManagerLockUI() {
+  const content = document.getElementById("managerContent");
+  const overlay = document.getElementById("managerLockedOverlay");
+  const unlockForm = document.getElementById("managerUnlockForm");
+
+  const hasPassword = Boolean(getStoredPasswordHash());
+  if (unlockForm) unlockForm.style.display = hasPassword ? "block" : "none";
+
+  if (managerUnlocked || !hasPassword) {
+    overlay?.classList.add("hidden");
+    if (content) content.style.display = "grid";
+  } else {
+    overlay?.classList.remove("hidden");
+    if (content) content.style.display = "none";
+  }
+}
+
+async function handleUnlock(password) {
+  const ok = await verifyManagerPassword(password);
+  if (!ok) {
+    setManagerSecurityStatus("Mot de passe incorrect.", "error");
+    managerUnlocked = false;
+    updateManagerLockUI();
+    return;
+  }
+  managerUnlocked = true;
+  setManagerSecurityStatus("Accès manager déverrouillé.", "success");
+  updateManagerLockUI();
+  refreshManagerImports();
+  refreshManagerResults();
+}
+
+function getManagerSignature(row) {
+  return [
+    row.fileName,
+    row.dateHeure,
+    row.machine,
+    row.article,
+    row.commentaire,
+    row.quantite,
+    row.heureDebut,
+    row.heureFin,
+  ]
+    .map(v => (v === undefined || v === null ? "" : String(v).toLowerCase().trim()))
+    .join("|");
+}
+
+function refreshManagerImports() {
+  const tbody = document.getElementById("managerImportsTable")?.querySelector("tbody");
+  if (!tbody) return;
+
+  const imports = [...managerImportLog].sort((a, b) => new Date(b.importedAt) - new Date(a.importedAt));
+  tbody.innerHTML = "";
+
+  imports.forEach(file => {
+    const tr = document.createElement("tr");
+    const dateImport = file.importedAt ? formatDateTime(new Date(file.importedAt)) : "-";
+    const qsh = [
+      file.quantieme ? `Q${String(file.quantieme).padStart(3, "0")}` : "?",
+      file.semaine ? `S${file.semaine}` : "?",
+      file.heureFichier || "-",
+    ]
+      .filter(Boolean)
+      .join(" / ");
+
+    tr.innerHTML = `
+      <td>${file.fileName}</td>
+      <td>${qsh}</td>
+      <td>${file.rowCount || 0}</td>
+      <td>${dateImport}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderManagerFieldSelector() {
+  const container = document.getElementById("managerFieldSelector");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  MANAGER_FIELDS.forEach(field => {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = managerSearchState.fields.has(field.key);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) managerSearchState.fields.add(field.key);
+      else managerSearchState.fields.delete(field.key);
+      refreshManagerResults();
+    });
+
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(field.label));
+    container.appendChild(label);
+  });
+}
+
+async function populateManagerLineFilter() {
+  const select = document.getElementById("managerLineFilter");
+  if (!select) return;
+
+  const previous = select.value;
+  select.innerHTML = "";
+
+  const baseOption = document.createElement("option");
+  baseOption.value = "";
+  baseOption.textContent = "Toutes";
+  select.appendChild(baseOption);
+
+  const uniqueLines = new Set(LINES);
+  managerDataset.forEach(r => {
+    if (r.ligne) uniqueLines.add(r.ligne);
+  });
+
+  Array.from(uniqueLines)
+    .sort()
+    .forEach(line => {
+      const opt = document.createElement("option");
+      opt.value = line;
+      opt.textContent = line;
+      select.appendChild(opt);
+    });
+
+  select.value = previous;
+}
+
+function populateManagerSortOptions() {
+  const sortSelect = document.getElementById("managerSortField");
+  if (!sortSelect) return;
+
+  sortSelect.innerHTML = "";
+  MANAGER_FIELDS.forEach(field => {
+    const opt = document.createElement("option");
+    opt.value = field.key;
+    opt.textContent = field.label;
+    sortSelect.appendChild(opt);
+  });
+
+  sortSelect.value = managerSearchState.sortField;
+}
+
+function refreshManagerResults() {
+  const table = document.getElementById("managerResultsTable");
+  if (!table) return;
+
+  let rows = [...managerDataset];
+
+  const query = managerSearchState.text.trim().toLowerCase();
+  if (query && managerSearchState.fields.size) {
+    rows = rows.filter(r => {
+      return Array.from(managerSearchState.fields).some(key => {
+        const val = r[key];
+        return val !== undefined && val !== null && String(val).toLowerCase().includes(query);
+      });
+    });
+  }
+
+  if (managerSearchState.equipe) {
+    rows = rows.filter(
+      r => (r.equipe || "").toUpperCase() === managerSearchState.equipe.toUpperCase()
+    );
+  }
+
+  if (managerSearchState.ligne) {
+    rows = rows.filter(r => (r.ligne || "") === managerSearchState.ligne);
+  }
+
+  const { sortField, sortDir } = managerSearchState;
+  rows.sort((a, b) => {
+    const av = a[sortField] ?? "";
+    const bv = b[sortField] ?? "";
+
+    if (av === bv) return 0;
+    if (av > bv) return sortDir === "asc" ? 1 : -1;
+    return sortDir === "asc" ? -1 : 1;
+  });
+
+  const tbody = table.querySelector("tbody");
+  tbody.innerHTML = "";
+
+  const max = 500;
+  rows.slice(0, max).forEach(row => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${row.dateHeure || ""}</td>
+      <td>${row.equipe || ""}</td>
+      <td>${row.ligne || ""}</td>
+      <td>${row.sousLigne || ""}</td>
+      <td>${row.machine || ""}</td>
+      <td>${row.quantite ?? ""}</td>
+      <td>${row.arretMinutes ?? ""}</td>
+      <td>${row.cadence ?? ""}</td>
+      <td>${row.commentaire || ""}</td>
+      <td>${row.article || ""}</td>
+      <td>${row.nomPersonnel || ""}</td>
+      <td>${row.motifPersonnel || ""}</td>
+      <td>${row.fileName || ""}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const infoEl = document.getElementById("managerResultsCount");
+  if (infoEl) {
+    infoEl.textContent = `${rows.length} résultat(s) / ${managerDataset.length} dans le classeur (affichage limité à ${max}).`;
+  }
+}
+
+async function importManagerFiles(files) {
+  if (!managerUnlocked && getStoredPasswordHash()) {
+    setManagerStatus("Déverrouille l'accès manager avant d'importer.", "error");
+    return;
+  }
+  if (!files.length) {
+    setManagerStatus("Sélectionne au moins un fichier Excel.", "warning");
+    return;
+  }
+
+  let totalRows = 0;
+  const skipped = [];
+
+  for (const file of files) {
+    const existing = managerImportLog.find(log => log.fileName === file.name);
+    if (existing) {
+      skipped.push(file.name);
+      continue;
+    }
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[firstSheet];
+      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+      const meta = {
+        ...parseFileNameInfo(file.name),
+        fileName: file.name,
+        importedAt: new Date().toISOString(),
+      };
+
+      const normalizedRows = rawRows
+        .filter(row => Object.values(row).some(v => v !== null && v !== ""))
+        .map(row => normalizeExcelRow(row, meta));
+
+      const freshRows = normalizedRows.filter(r => {
+        const sig = getManagerSignature(r);
+        if (managerSignatureSet.has(sig)) return false;
+        managerSignatureSet.add(sig);
+        return true;
+      });
+
+      if (!freshRows.length) continue;
+
+      managerDataset.push(...freshRows);
+      managerImportLog.push({
+        fileName: file.name,
+        importedAt: meta.importedAt,
+        quantieme: meta.quantieme,
+        semaine: meta.semaine,
+        heureFichier: meta.heureFichier,
+        rowCount: freshRows.length,
+      });
+
+      totalRows += freshRows.length;
+    } catch (e) {
+      console.error("Manager import error", e);
+      setManagerStatus(`Erreur sur ${file.name} : ${e.message || e}`, "error");
+    }
+  }
+
+  persistManagerWorkbook();
+  saveManagerImportLog();
+
+  const parts = [];
+  if (totalRows > 0) parts.push(`${totalRows} ligne(s) ajoutée(s)`);
+  if (skipped.length) parts.push(`fichiers ignorés : ${skipped.join(", ")}`);
+
+  const variant = totalRows > 0 ? "success" : skipped.length ? "warning" : "";
+  setManagerStatus(parts.length ? parts.join(" • ") : "Aucune ligne ajoutée.", variant);
+
+  refreshManagerImports();
+  refreshManagerResults();
+  populateManagerLineFilter();
+}
+
+function resetManagerStore() {
+  managerDataset = [];
+  managerImportLog = [];
+  managerSignatureSet = new Set();
+  localStorage.removeItem(MANAGER_MASTER_KEY);
+  localStorage.removeItem(MANAGER_IMPORT_LOG_KEY);
+  setManagerStatus("Base vidée.", "warning");
+  refreshManagerImports();
+  refreshManagerResults();
+  populateManagerLineFilter();
+}
+
+function downloadManagerWorkbook() {
+  try {
+    const rows = managerDataset.map(recordToSheetRow);
+    const ws = XLSX.utils.json_to_sheet(rows, { header: MANAGER_COLUMNS_FOR_EXCEL.map(c => c.header) });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Historique");
+    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "manager_historique.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setManagerStatus("Classeur exporté.", "success");
+  } catch (e) {
+    console.error("Export manager impossible", e);
+    setManagerStatus("Impossible de générer le classeur.", "error");
+  }
+}
+
+function bindManagerArea() {
+  loadManagerWorkbookFromStorage();
+  loadManagerImportLog();
+
+  renderManagerFieldSelector();
+  populateManagerSortOptions();
+  populateManagerLineFilter();
+  updateManagerLockUI();
+
+  const input = document.getElementById("managerExcelInput");
+  const btn = document.getElementById("managerImportBtn");
+  const resetBtn = document.getElementById("managerResetBtn");
+  const exportBtn = document.getElementById("managerExportBtn");
+
+  if (btn && input) {
+    btn.addEventListener("click", async () => {
+      const files = Array.from(input.files || []);
+      setManagerStatus("Import en cours...");
+      await importManagerFiles(files);
+      input.value = "";
+    });
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener("click", async () => {
+      const confirmReset = confirm("Vider la base manager ? (sans toucher aux autres formulaires)");
+      if (confirmReset) resetManagerStore();
+    });
+  }
+
+  if (exportBtn) {
+    exportBtn.addEventListener("click", downloadManagerWorkbook);
+  }
+
+  const searchInput = document.getElementById("managerSearchInput");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      managerSearchState.text = searchInput.value;
+      refreshManagerResults();
+    });
+  }
+
+  const equipeFilter = document.getElementById("managerEquipeFilter");
+  if (equipeFilter) {
+    equipeFilter.addEventListener("change", () => {
+      managerSearchState.equipe = equipeFilter.value;
+      refreshManagerResults();
+    });
+  }
+
+  const lineFilter = document.getElementById("managerLineFilter");
+  if (lineFilter) {
+    lineFilter.addEventListener("change", () => {
+      managerSearchState.ligne = lineFilter.value;
+      refreshManagerResults();
+    });
+  }
+
+  const sortSelect = document.getElementById("managerSortField");
+  if (sortSelect) {
+    sortSelect.addEventListener("change", () => {
+      managerSearchState.sortField = sortSelect.value;
+      refreshManagerResults();
+    });
+  }
+
+  const sortDir = document.getElementById("managerSortDir");
+  if (sortDir) {
+    sortDir.addEventListener("change", () => {
+      managerSearchState.sortDir = sortDir.value;
+      refreshManagerResults();
+    });
+  }
+
+  const unlockForm = document.getElementById("managerUnlockForm");
+  const setPwdForm = document.getElementById("managerSetPasswordForm");
+  const unlockInput = document.getElementById("managerUnlockInput");
+  const pwdInput = document.getElementById("managerPasswordInput");
+
+  if (unlockForm) {
+    unlockForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      const pwd = unlockInput?.value || "";
+      await handleUnlock(pwd);
+      if (unlockInput) unlockInput.value = "";
+    });
+  }
+
+  if (setPwdForm) {
+    setPwdForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      const pwd = pwdInput?.value || "";
+      const ok = await setManagerPassword(pwd);
+      if (ok && !managerUnlocked) await handleUnlock(pwd);
+      if (pwdInput) pwdInput.value = "";
+      updateManagerLockUI();
+    });
+  }
+
+  refreshManagerImports();
+  refreshManagerResults();
+}
+
+function refreshImportLog() {
+  const tbody = document.getElementById("importsTableBody");
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+
+  [...(state.excelFiles || [])]
+    .sort((a, b) => new Date(b.importedAt) - new Date(a.importedAt))
+    .forEach(file => {
+      const tr = document.createElement("tr");
+      const dateImport = file.importedAt ? formatDateTime(new Date(file.importedAt)) : "-";
+      const qsh = [file.quantieme ? `Q${String(file.quantieme).padStart(3, "0")}` : "?", file.semaine ? `S${file.semaine}` : "?", file.heureFichier || "-"]
+        .filter(Boolean)
+        .join(" / ");
+
+      tr.innerHTML = `
+        <td>${file.fileName}</td>
+        <td>${qsh}</td>
+        <td>${file.rowCount || 0}</td>
+        <td>${dateImport}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+  const countEl = document.getElementById("importResultsCount");
+  if (countEl) {
+    const total = state.excelRecords ? state.excelRecords.length : 0;
+    countEl.textContent = `${total} enregistrement(s) importés.`;
+  }
+}
+
+function populateImportFilters() {
+  const lineSelect = document.getElementById("importLineFilter");
+  if (!lineSelect || lineSelect.dataset.populated === "1") return;
+  lineSelect.dataset.populated = "1";
+
+  LINES.forEach(line => {
+    const opt = document.createElement("option");
+    opt.value = line;
+    opt.textContent = line;
+    lineSelect.appendChild(opt);
+  });
+}
+
+function refreshImportSearch() {
+  const table = document.getElementById("importResultsTable");
+  if (!table) return;
+
+  const query = (document.getElementById("importSearchInput")?.value || "").trim().toLowerCase();
+  const equipe = (document.getElementById("importEquipeFilter")?.value || "").toUpperCase();
+  const ligne = document.getElementById("importLineFilter")?.value || "";
+
+  let results = state.excelRecords || [];
+
+  if (equipe) {
+    results = results.filter(r => (r.equipe || "").toUpperCase() === equipe);
+  }
+
+  if (ligne) {
+    results = results.filter(r => (r.ligne || "") === ligne);
+  }
+
+  if (query) {
+    results = results.filter(r => {
+      return [r.article, r.machine, r.commentaire, r.type, r.dateHeure, r.nomPersonnel]
+        .filter(Boolean)
+        .some(val => String(val).toLowerCase().includes(query));
+    });
+  }
+
+  const tbody = table.querySelector("tbody");
+  tbody.innerHTML = "";
+
+  results.slice(0, 200).forEach(rec => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${rec.dateHeure || ""}</td>
+      <td>${rec.equipe || ""}</td>
+      <td>${rec.ligne || ""}</td>
+      <td>${rec.machine || ""}</td>
+      <td>${rec.quantite ?? ""}</td>
+      <td>${rec.arretMinutes ?? ""}</td>
+      <td>${rec.cadence ?? ""}</td>
+      <td>${rec.commentaire || ""}</td>
+      <td>${rec.fileName}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const infoEl = document.getElementById("importResultsCount");
+  if (infoEl) {
+    const total = state.excelRecords ? state.excelRecords.length : 0;
+    infoEl.textContent = `${results.length} résultat(s) filtrés / ${total} importés (max 200 affichés).`;
+  }
+}
+
+function bindExcelImport() {
+  const btn = document.getElementById("importExcelBtn");
+  const input = document.getElementById("excelInput");
+  if (!btn || !input) return;
+
+  populateImportFilters();
+
+  btn.addEventListener("click", async () => {
+    const files = Array.from(input.files || []);
+    setImportStatus("Import en cours...", "");
+    await importExcelFiles(files);
+    input.value = "";
+  });
+
+  const searchInput = document.getElementById("importSearchInput");
+  const equipeFilter = document.getElementById("importEquipeFilter");
+  const lineFilter = document.getElementById("importLineFilter");
+
+  if (searchInput) searchInput.addEventListener("input", refreshImportSearch);
+  if (equipeFilter) equipeFilter.addEventListener("change", refreshImportSearch);
+  if (lineFilter) lineFilter.addEventListener("change", refreshImportSearch);
+
+  refreshImportLog();
+  refreshImportSearch();
 }
 
 /******************************
@@ -288,6 +1178,11 @@ function showSection(section) {
   else if (section === "arrets") refreshArretsView();
   else if (section === "organisation") refreshOrganisationView();
   else if (section === "personnel") refreshPersonnelView();
+  else if (section === "manager") {
+    populateManagerLineFilter();
+    refreshManagerImports();
+    refreshManagerResults();
+  }
 }
 
 function initNav() {
@@ -914,8 +1809,11 @@ function refreshAtelierChart() {
 function refreshAtelierView() {
   const container = document.getElementById("atelier-lines-summary");
   if (!container) return;
-  
+
   container.innerHTML = "";
+
+  refreshImportLog();
+  refreshImportSearch();
 
   // cartes lignes
   LINES.forEach(line => {
@@ -1894,6 +2792,8 @@ document.addEventListener("DOMContentLoaded", () => {
   initHeaderDate();
   initEquipeSelector();
   initNav();
+  bindExcelImport();
+  bindManagerArea();
   initLinesSidebar();
   bindProductionForm();
   initArretsForm();
