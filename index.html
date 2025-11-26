@@ -42,7 +42,8 @@
     <div class="header-info" id="header-datetime">
       <!-- injecté JS -->
     </div>
-    <div style="display: flex; gap: 10px; align-items: center;">
+    <div class="header-actions">
+      <button id="settingsToggle" class="icon-btn" title="Paramètres et sécurité">⚙️</button>
       <select id="equipeSelector" class="equipe-selector">
         <option value="M">Équipe M</option>
         <option value="AM">Équipe AM</option>
@@ -73,34 +74,6 @@
         <div class="card">
           <h3>Production par ligne (aujourd'hui)</h3>
           <div id="atelier-lines-summary"></div>
-        </div>
-
-        <div class="card">
-          <h3>Mise à jour Excel</h3>
-          <p class="helper-text">
-            Charge un ou plusieurs fichiers du type <strong>Atelier_DATA_EQN_Qxxx_Sxx_hhmm.xlsx</strong>. Pas de limite à 3 fichiers ni à un seul import par jour.
-          </p>
-
-          <div class="import-actions">
-            <input type="file" id="excelInput" accept=".xlsx,.xls" multiple />
-            <button id="importExcelBtn" class="primary-btn">📥 Mise à jour</button>
-          </div>
-
-          <div id="importStatus" class="import-status helper-text"></div>
-
-          <div class="table-wrapper-horizontal">
-            <table class="table" id="importsTable">
-              <thead>
-                <tr>
-                  <th>Fichier</th>
-                  <th>Q / S / Heure</th>
-                  <th>Enregistrements</th>
-                  <th>Importé le</th>
-                </tr>
-              </thead>
-              <tbody id="importsTableBody"></tbody>
-            </table>
-          </div>
         </div>
 
         <div class="card">
@@ -146,52 +119,6 @@
           <button id="razBtn" class="danger-btn">
             🔄 RAZ équipe (double export + reset)
           </button>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Recherche dans les imports Excel</h3>
-        <div class="form-grid import-filters">
-          <div class="form-group">
-            <label for="importSearchInput">Recherche texte</label>
-            <input type="text" id="importSearchInput" placeholder="Article, machine, commentaire..." />
-          </div>
-          <div class="form-group">
-            <label for="importEquipeFilter">Équipe</label>
-            <select id="importEquipeFilter">
-              <option value="">Toutes</option>
-              <option value="M">M</option>
-              <option value="AM">AM</option>
-              <option value="N">N</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="importLineFilter">Ligne</label>
-            <select id="importLineFilter">
-              <option value="">Toutes les lignes</option>
-            </select>
-          </div>
-        </div>
-
-        <p class="helper-text" id="importResultsCount"></p>
-
-        <div class="table-wrapper-horizontal">
-          <table class="table" id="importResultsTable">
-            <thead>
-              <tr>
-                <th>Date/Heure</th>
-                <th>Équipe</th>
-                <th>Ligne</th>
-                <th>Machine</th>
-                <th>Quantité</th>
-                <th>Arrêt (min)</th>
-                <th>Cadence</th>
-                <th>Commentaire</th>
-                <th>Fichier</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
         </div>
       </div>
     </section>
@@ -592,12 +519,15 @@
         <div class="card">
           <h3>Import vers la base manager</h3>
           <p class="helper-text">
-            Les fichiers peuvent arriver à tout moment (jusqu'à plusieurs par équipe). Aucun prérequis de nombre ou de
-            plage horaire.
+            Les fichiers peuvent arriver à tout moment (jusqu'à plusieurs par équipe). Clique sur « Mise à jour » pour
+            scanner un dossier et ne récupérer que les fichiers Excel non encore importés.
           </p>
           <div class="import-actions">
             <input type="file" id="managerExcelInput" accept=".xlsx,.xls" multiple />
-            <button id="managerImportBtn" class="primary-btn">📥 Importer dans la base</button>
+            <button id="managerScanBtn" class="primary-btn">📂 Mise à jour (scanne un dossier)</button>
+            <button id="managerImportBtn" class="secondary-btn" title="Importer manuellement plusieurs fichiers">
+              📥 Importer une sélection
+            </button>
             <button id="managerExportBtn" class="secondary-btn" title="Télécharger le classeur historisé">📑 Export Excel</button>
             <button id="managerResetBtn" class="danger-btn" title="Effacer la base manager (pas les autres formulaires)">🗑️ Vider la base</button>
           </div>
@@ -620,6 +550,7 @@
 
         <div class="card">
           <h3>Recherche et tri</h3>
+          <p class="helper-text">Tape un mot-clé ou combine plusieurs filtres. La recherche couvre tous les champs de l'historique.</p>
           <div class="form-grid import-filters">
             <div class="form-group">
               <label for="managerSearchInput">Recherche texte</label>
@@ -653,37 +584,96 @@
             </div>
           </div>
 
+          <div class="manager-active-filters" id="managerActiveFilters"></div>
           <div class="field-selector" id="managerFieldSelector"></div>
           <p class="helper-text" id="managerResultsCount"></p>
         </div>
       </div>
 
-      <div class="card">
-        <h3>Résultats (base manager)</h3>
-        <div class="table-wrapper-horizontal">
-          <table class="table" id="managerResultsTable">
-            <thead>
-              <tr>
-                <th>Date/Heure</th>
-                <th>Équipe</th>
-                <th>Ligne</th>
-                <th>Sous-ligne</th>
-                <th>Machine</th>
-                <th>Quantité</th>
-                <th>Arrêt (min)</th>
-                <th>Cadence</th>
-                <th>Commentaire</th>
-                <th>Article</th>
-                <th>Personnel</th>
-                <th>Motif</th>
-                <th>Fichier</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+      <div class="card" id="managerResultsCard">
+        <div class="manager-results-header">
+          <div>
+            <h3>Résultats (base manager)</h3>
+            <p class="helper-text">Affichage enrichi avec rappel des métadonnées fichier (quantième, semaine, heure).</p>
+          </div>
+          <div class="manager-result-badges" id="managerResultBadges"></div>
+        </div>
+
+        <div class="manager-results-grid">
+          <div class="manager-stats" id="managerStats"></div>
+
+          <div class="table-wrapper-horizontal">
+            <table class="table manager-table" id="managerResultsTable">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Date/Heure</th>
+                  <th>Équipe</th>
+                  <th>Ligne</th>
+                  <th>Sous-ligne</th>
+                  <th>Machine</th>
+                  <th>Quantité</th>
+                  <th>Arrêt (min)</th>
+                  <th>Cadence</th>
+                  <th>Commentaire</th>
+                  <th>Article</th>
+                  <th>Personnel</th>
+                  <th>Motif</th>
+                  <th>Fichier (Q/S/H)</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
+
+    <!-- PANNEAU PARAMÈTRES -->
+    <div id="settingsPanel" class="settings-panel hidden">
+      <div class="settings-panel__header">
+        <h3>Paramètres</h3>
+        <button id="settingsClose" class="icon-btn" aria-label="Fermer">✕</button>
+      </div>
+      <p class="helper-text">Mot de passe local, thème et options rapides. Rien n'est envoyé en ligne.</p>
+
+      <div class="settings-grid">
+        <div class="card compact">
+          <h4>Accès Manager</h4>
+          <form id="settingsUnlockForm" class="manager-security-form">
+            <label for="settingsUnlockInput">Déverrouiller</label>
+            <div class="manager-security-actions">
+              <input type="password" id="settingsUnlockInput" placeholder="Mot de passe" />
+              <button type="submit" class="primary-btn">🔓</button>
+            </div>
+          </form>
+
+          <form id="settingsPasswordForm" class="manager-security-form">
+            <label for="settingsPasswordInput">Définir / modifier</label>
+            <div class="manager-security-actions">
+              <input type="password" id="settingsPasswordInput" placeholder="Nouveau mot de passe" />
+              <button type="submit" class="secondary-btn">💾</button>
+            </div>
+          </form>
+          <div id="settingsSecurityStatus" class="import-status helper-text"></div>
+        </div>
+
+        <div class="card compact">
+          <h4>Affichage</h4>
+          <div class="settings-toggle-row">
+            <span>Thème clair / sombre</span>
+            <button id="settingsThemeBtn" class="secondary-btn" type="button">Basculer</button>
+          </div>
+          <div class="settings-toggle-row">
+            <span>Réduire le bandeau</span>
+            <label class="switch">
+              <input type="checkbox" id="headerCompactToggle" checked />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- CALCULATRICE FLOTTANTE -->
     <div id="calculator" class="calculator hidden">

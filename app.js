@@ -451,11 +451,13 @@ function setManagerStatus(message, variant = "") {
 }
 
 function setManagerSecurityStatus(message, variant = "") {
-  const el = document.getElementById("managerSecurityStatus");
-  if (!el) return;
-  el.textContent = message;
-  el.className = "import-status helper-text";
-  if (variant) el.classList.add(variant);
+  ["managerSecurityStatus", "settingsSecurityStatus"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = message;
+    el.className = "import-status helper-text";
+    if (variant) el.classList.add(variant);
+  });
 }
 
 function recordToSheetRow(rec) {
@@ -550,6 +552,7 @@ function updateManagerLockUI() {
   const content = document.getElementById("managerContent");
   const overlay = document.getElementById("managerLockedOverlay");
   const unlockForm = document.getElementById("managerUnlockForm");
+  const resultsCard = document.getElementById("managerResultsCard");
 
   const hasPassword = Boolean(getStoredPasswordHash());
   if (unlockForm) unlockForm.style.display = hasPassword ? "block" : "none";
@@ -557,9 +560,11 @@ function updateManagerLockUI() {
   if (managerUnlocked || !hasPassword) {
     overlay?.classList.add("hidden");
     if (content) content.style.display = "grid";
+    if (resultsCard) resultsCard.style.display = "block";
   } else {
     overlay?.classList.remove("hidden");
     if (content) content.style.display = "none";
+    if (resultsCard) resultsCard.style.display = "none";
   }
 }
 
@@ -688,30 +693,125 @@ function populateManagerSortOptions() {
   sortSelect.value = managerSearchState.sortField;
 }
 
+function escapeHtml(str = "") {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function highlightText(str, query) {
+  const safe = escapeHtml(str ?? "");
+  if (!query) return safe;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`(${escaped})`, "gi");
+  return safe.replace(regex, "<mark>$1</mark>");
+}
+
+function formatQSH(meta) {
+  const q = meta.quantieme ? `Q${String(meta.quantieme).padStart(3, "0")}` : "Q???";
+  const s = meta.semaine ? `S${meta.semaine}` : "S??";
+  const h = meta.heureFichier || "-";
+  return `${q} / ${s} / ${h}`;
+}
+
+function renderFilterChips(filters) {
+  const container = document.getElementById("managerActiveFilters");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (!filters.length) {
+    const chip = document.createElement("div");
+    chip.className = "filter-chip";
+    chip.textContent = "Aucun filtre (tous les champs)";
+    container.appendChild(chip);
+    return;
+  }
+
+  filters.forEach(f => {
+    const chip = document.createElement("div");
+    chip.className = "filter-chip";
+    chip.innerHTML = `<span>${f.label}</span> ${escapeHtml(f.value)}`;
+    container.appendChild(chip);
+  });
+}
+
+function renderManagerBadges(filtered, total) {
+  const wrap = document.getElementById("managerResultBadges");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+
+  const badges = [
+    { label: "Affichés", value: filtered },
+    { label: "Total", value: total },
+    { label: "Tri", value: `${managerSearchState.sortField} (${managerSearchState.sortDir === "asc" ? "↗" : "↘"})` },
+  ];
+
+  badges.forEach(b => {
+    const div = document.createElement("div");
+    div.className = "result-badge";
+    div.textContent = `${b.label} : ${b.value}`;
+    wrap.appendChild(div);
+  });
+}
+
+function renderManagerStats(filtered) {
+  const stats = document.getElementById("managerStats");
+  if (!stats) return;
+  stats.innerHTML = "";
+
+  const sortedLog = [...managerImportLog].sort((a, b) => new Date(b.importedAt) - new Date(a.importedAt));
+  const last = sortedLog[0];
+  const items = [
+    { label: "Lignes totales", value: managerDataset.length },
+    { label: "Résultats filtrés", value: filtered },
+    { label: "Fichiers importés", value: managerImportLog.length },
+    { label: "Dernier import", value: last?.importedAt ? formatDateTime(new Date(last.importedAt)) : "-" },
+  ];
+
+  items.forEach(item => {
+    const card = document.createElement("div");
+    card.className = "stat-card";
+    card.innerHTML = `<span class="stat-label">${item.label}</span><span class="stat-value">${item.value}</span>`;
+    stats.appendChild(card);
+  });
+}
+
 function refreshManagerResults() {
   const table = document.getElementById("managerResultsTable");
   if (!table) return;
 
   let rows = [...managerDataset];
+  const totalRows = rows.length;
+  const query = managerSearchState.text.trim();
+  const queryLower = query.toLowerCase();
 
-  const query = managerSearchState.text.trim().toLowerCase();
+  const filters = [];
+
   if (query && managerSearchState.fields.size) {
+    filters.push({ label: "Texte", value: query });
     rows = rows.filter(r => {
       return Array.from(managerSearchState.fields).some(key => {
         const val = r[key];
-        return val !== undefined && val !== null && String(val).toLowerCase().includes(query);
+        return val !== undefined && val !== null && String(val).toLowerCase().includes(queryLower);
       });
     });
   }
 
   if (managerSearchState.equipe) {
+    filters.push({ label: "Équipe", value: managerSearchState.equipe });
     rows = rows.filter(
       r => (r.equipe || "").toUpperCase() === managerSearchState.equipe.toUpperCase()
     );
   }
 
   if (managerSearchState.ligne) {
+    filters.push({ label: "Ligne", value: managerSearchState.ligne });
     rows = rows.filter(r => (r.ligne || "") === managerSearchState.ligne);
+  }
+
+  if (managerSearchState.fields.size !== MANAGER_FIELDS.length) {
+    filters.push({ label: "Champs", value: `${managerSearchState.fields.size}/${MANAGER_FIELDS.length}` });
   }
 
   const { sortField, sortDir } = managerSearchState;
@@ -724,33 +824,40 @@ function refreshManagerResults() {
     return sortDir === "asc" ? -1 : 1;
   });
 
+  renderFilterChips(filters);
+  renderManagerBadges(rows.length, totalRows);
+  renderManagerStats(rows.length);
+
   const tbody = table.querySelector("tbody");
   tbody.innerHTML = "";
 
   const max = 500;
   rows.slice(0, max).forEach(row => {
     const tr = document.createElement("tr");
+    const typeLabel = row.type || "Production / Arrêt";
+    const qsh = formatQSH(row);
     tr.innerHTML = `
-      <td>${row.dateHeure || ""}</td>
-      <td>${row.equipe || ""}</td>
-      <td>${row.ligne || ""}</td>
-      <td>${row.sousLigne || ""}</td>
-      <td>${row.machine || ""}</td>
-      <td>${row.quantite ?? ""}</td>
-      <td>${row.arretMinutes ?? ""}</td>
-      <td>${row.cadence ?? ""}</td>
-      <td>${row.commentaire || ""}</td>
-      <td>${row.article || ""}</td>
-      <td>${row.nomPersonnel || ""}</td>
-      <td>${row.motifPersonnel || ""}</td>
-      <td>${row.fileName || ""}</td>
+      <td><span class="type-pill">${escapeHtml(typeLabel)}</span></td>
+      <td>${highlightText(row.dateHeure || "", query)}</td>
+      <td>${highlightText(row.equipe || "", query)}</td>
+      <td>${highlightText(row.ligne || "", query)}</td>
+      <td>${highlightText(row.sousLigne || "", query)}</td>
+      <td>${highlightText(row.machine || "", query)}</td>
+      <td>${highlightText(row.quantite ?? "", query)}</td>
+      <td>${highlightText(row.arretMinutes ?? "", query)}</td>
+      <td>${highlightText(row.cadence ?? "", query)}</td>
+      <td>${highlightText(row.commentaire || "", query)}</td>
+      <td>${highlightText(row.article || "", query)}</td>
+      <td>${highlightText(row.nomPersonnel || "", query)}</td>
+      <td>${highlightText(row.motifPersonnel || "", query)}</td>
+      <td>${highlightText(`${row.fileName || ""} — ${qsh}`, query)}</td>
     `;
     tbody.appendChild(tr);
   });
 
   const infoEl = document.getElementById("managerResultsCount");
   if (infoEl) {
-    infoEl.textContent = `${rows.length} résultat(s) / ${managerDataset.length} dans le classeur (affichage limité à ${max}).`;
+    infoEl.textContent = `${rows.length} résultat(s) filtrés / ${managerDataset.length} dans le classeur (affichage limité à ${max}).`;
   }
 }
 
@@ -832,6 +939,45 @@ async function importManagerFiles(files) {
   populateManagerLineFilter();
 }
 
+async function scanFolderForManagerFiles() {
+  const input = document.getElementById("managerExcelInput");
+  if (!window.showDirectoryPicker) {
+    setManagerStatus("Ton navigateur ne permet pas de scanner un dossier. Utilise l'import manuel ci-dessous.", "warning");
+    input?.click();
+    return;
+  }
+
+  try {
+    const dirHandle = await window.showDirectoryPicker();
+    const files = [];
+    for await (const entry of dirHandle.values()) {
+      if (entry.kind === "file" && /\.xlsx?$/i.test(entry.name)) {
+        const file = await entry.getFile();
+        files.push(file);
+      }
+    }
+
+    if (!files.length) {
+      setManagerStatus("Aucun fichier Excel trouvé dans ce dossier.", "warning");
+      return;
+    }
+
+    const importedNames = new Set(managerImportLog.map(log => log.fileName));
+    const freshFiles = files.filter(f => !importedNames.has(f.name));
+
+    if (!freshFiles.length) {
+      setManagerStatus("Tout est déjà importé pour ce dossier.", "success");
+      return;
+    }
+
+    setManagerStatus(`Import en cours (${freshFiles.length} nouveau(x) fichier(s))...`);
+    await importManagerFiles(freshFiles);
+  } catch (e) {
+    console.error("Scan dossier échoué", e);
+    setManagerStatus("Impossible de scanner ce dossier (permissions ?)", "error");
+  }
+}
+
 function resetManagerStore() {
   managerDataset = [];
   managerImportLog = [];
@@ -878,6 +1024,7 @@ function bindManagerArea() {
 
   const input = document.getElementById("managerExcelInput");
   const btn = document.getElementById("managerImportBtn");
+  const scanBtn = document.getElementById("managerScanBtn");
   const resetBtn = document.getElementById("managerResetBtn");
   const exportBtn = document.getElementById("managerExportBtn");
 
@@ -887,6 +1034,13 @@ function bindManagerArea() {
       setManagerStatus("Import en cours...");
       await importManagerFiles(files);
       input.value = "";
+    });
+  }
+
+  if (scanBtn) {
+    scanBtn.addEventListener("click", async () => {
+      setManagerStatus("Recherche des fichiers non importés...");
+      await scanFolderForManagerFiles();
     });
   }
 
@@ -2773,6 +2927,54 @@ function initTheme() {
   });
 }
 
+function initSettingsPanel() {
+  const panel = document.getElementById("settingsPanel");
+  const toggle = document.getElementById("settingsToggle");
+  const close = document.getElementById("settingsClose");
+  if (!panel || !toggle || !close) return;
+
+  const hide = () => panel.classList.add("hidden");
+  const show = () => panel.classList.remove("hidden");
+
+  toggle.addEventListener("click", () => {
+    panel.classList.toggle("hidden");
+  });
+
+  close.addEventListener("click", hide);
+
+  const themeBtn = document.getElementById("settingsThemeBtn");
+  themeBtn?.addEventListener("click", () => document.getElementById("themeToggleBtn")?.click());
+
+  const headerToggle = document.getElementById("headerCompactToggle");
+  const applyHeaderSize = () => {
+    if (headerToggle?.checked) {
+      document.body.classList.add("compact-header");
+    } else {
+      document.body.classList.remove("compact-header");
+    }
+  };
+  headerToggle?.addEventListener("change", applyHeaderSize);
+  applyHeaderSize();
+
+  const unlockForm = document.getElementById("settingsUnlockForm");
+  const unlockInput = document.getElementById("settingsUnlockInput");
+  unlockForm?.addEventListener("submit", async e => {
+    e.preventDefault();
+    await handleUnlock(unlockInput?.value || "");
+    unlockInput.value = "";
+    hide();
+  });
+
+  const pwdForm = document.getElementById("settingsPasswordForm");
+  const pwdInput = document.getElementById("settingsPasswordInput");
+  pwdForm?.addEventListener("submit", async e => {
+    e.preventDefault();
+    const ok = await setManagerPassword(pwdInput?.value || "");
+    if (ok && !managerUnlocked) await handleUnlock(pwdInput?.value || "");
+    if (pwdInput) pwdInput.value = "";
+  });
+}
+
 /********************************************
  *   ORIENTATION
  ********************************************/
@@ -2792,7 +2994,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initHeaderDate();
   initEquipeSelector();
   initNav();
-  bindExcelImport();
   bindManagerArea();
   initLinesSidebar();
   bindProductionForm();
@@ -2805,6 +3006,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindRAZEquipe();
   initHistoriqueEquipes();
   initTheme();
+  initSettingsPanel();
 
   updateOrientationLayout();
   window.addEventListener("resize", updateOrientationLayout);
