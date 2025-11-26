@@ -69,6 +69,8 @@ let state = {
   arrets: [],
   organisation: [],
   personnel: [],
+  excelRecords: [],
+  excelFiles: [],
   formDraft: {},
 };
 
@@ -163,6 +165,8 @@ function loadState() {
       arrets: [],
       organisation: [],
       personnel: [],
+      excelRecords: [],
+      excelFiles: [],
       formDraft: {},
     };
 
@@ -172,6 +176,9 @@ function loadState() {
       if (!state.production[l]) state.production[l] = [];
       if (!state.formDraft[l]) state.formDraft[l] = {};
     });
+
+    if (!state.excelRecords) state.excelRecords = [];
+    if (!state.excelFiles) state.excelFiles = [];
 
   } catch (e) {
     console.error("loadState error", e);
@@ -200,6 +207,286 @@ function saveArchives() {
   try {
     localStorage.setItem(ARCHIVES_KEY, JSON.stringify(archives));
   } catch {}
+}
+
+/******************************
+ *   PARTIE 1B – IMPORT EXCEL
+ ******************************/
+
+function generateId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function parseFileNameInfo(fileName) {
+  const match = fileName.match(/Q(\d{3}).*?S(\d{2}).*?(\d{2})h(\d{2})/i);
+  if (!match) return { fileName, quantieme: null, semaine: null, heureFichier: null, formattedDate: null };
+
+  const quantieme = Number(match[1]);
+  const semaine = Number(match[2]);
+  const heureFichier = `${match[3]}:${match[4]}`;
+
+  let formattedDate = null;
+  try {
+    const year = new Date().getFullYear();
+    const date = quantiemeToDate(quantieme, year);
+    formattedDate = formatDateDDM(date);
+  } catch {
+    formattedDate = null;
+  }
+
+  return { fileName, quantieme, semaine, heureFichier, formattedDate };
+}
+
+function normalizeExcelRow(row, meta) {
+  const getStr = (...keys) => {
+    for (const key of keys) {
+      if (row[key] !== undefined && row[key] !== null) {
+        return String(row[key]).trim();
+      }
+    }
+    return "";
+  };
+
+  const getNum = (...keys) => {
+    for (const key of keys) {
+      if (row[key] === undefined || row[key] === null || row[key] === "") continue;
+      const num = Number(row[key]);
+      if (!Number.isNaN(num)) return num;
+    }
+    return null;
+  };
+
+  return {
+    id: generateId(),
+    fileName: meta.fileName,
+    importedAt: meta.importedAt,
+    quantieme: meta.quantieme,
+    semaine: meta.semaine,
+    heureFichier: meta.heureFichier,
+    fichierDate: meta.formattedDate,
+    type: getStr("Type"),
+    dateHeure: getStr("Date/Heure", "Date", "Heure"),
+    equipe: getStr("Équipe", "Equipe"),
+    ligne: getStr("Ligne"),
+    sousLigne: getStr("Sous-ligne", "Sous ligne", "Sous_ligne"),
+    machine: getStr("Machine"),
+    heureDebut: getStr("Heure Début", "Heure debut"),
+    heureFin: getStr("Heure Fin"),
+    quantite: getNum("Quantité", "Quantite"),
+    arretMinutes: getNum("Arrêt (min)", "Arret (min)", "Arrêt"),
+    cadence: getNum("Cadence"),
+    tempsRestant: getNum("Temps Restant"),
+    commentaire: getStr("Commentaire"),
+    article: getStr("Article"),
+    nomPersonnel: getStr("Nom Personnel"),
+    motifPersonnel: getStr("Motif Personnel"),
+    visa: getStr("Visa"),
+    validee: getStr("Validée", "Validee"),
+  };
+}
+
+function setImportStatus(message, variant = "") {
+  const el = document.getElementById("importStatus");
+  if (!el) return;
+  el.textContent = message;
+  el.className = "import-status helper-text";
+  if (variant) {
+    el.classList.add(variant);
+  }
+}
+
+async function processExcelFile(file) {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array" });
+  const firstSheet = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[firstSheet];
+  const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+  const meta = { ...parseFileNameInfo(file.name), fileName: file.name, importedAt: new Date().toISOString() };
+
+  const normalizedRows = rawRows
+    .filter(row => Object.values(row).some(v => v !== null && v !== ""))
+    .map(row => normalizeExcelRow(row, meta));
+
+  if (!normalizedRows.length) return { count: 0 };
+
+  state.excelRecords.push(...normalizedRows);
+  state.excelFiles.push({
+    id: generateId(),
+    fileName: file.name,
+    importedAt: meta.importedAt,
+    quantieme: meta.quantieme,
+    semaine: meta.semaine,
+    heureFichier: meta.heureFichier,
+    fichierDate: meta.formattedDate,
+    rowCount: normalizedRows.length,
+  });
+
+  saveState();
+  return { count: normalizedRows.length };
+}
+
+async function importExcelFiles(files) {
+  if (!files.length) {
+    setImportStatus("Sélectionne au moins un fichier Excel.", "warning");
+    return;
+  }
+
+  let totalRows = 0;
+  const skipped = [];
+
+  for (const file of files) {
+    if (state.excelFiles.some(f => f.fileName === file.name)) {
+      skipped.push(file.name);
+      continue;
+    }
+
+    try {
+      const { count } = await processExcelFile(file);
+      totalRows += count;
+    } catch (e) {
+      console.error("Import excel error", e);
+      setImportStatus(`Erreur sur ${file.name} : ${e.message || e}`, "error");
+    }
+  }
+
+  if (totalRows > 0 || skipped.length) {
+    const parts = [];
+    if (totalRows > 0) parts.push(`${totalRows} ligne(s) ajoutée(s)`);
+    if (skipped.length) parts.push(`fichiers ignorés (déjà importés) : ${skipped.join(", ")}`);
+    const variant = totalRows > 0 ? "success" : "warning";
+    setImportStatus(`Import terminé : ${parts.join(" • ")}`, variant);
+  } else {
+    setImportStatus("Aucune ligne importée.", "warning");
+  }
+
+  refreshImportLog();
+  refreshImportSearch();
+}
+
+function refreshImportLog() {
+  const tbody = document.getElementById("importsTableBody");
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+
+  [...(state.excelFiles || [])]
+    .sort((a, b) => new Date(b.importedAt) - new Date(a.importedAt))
+    .forEach(file => {
+      const tr = document.createElement("tr");
+      const dateImport = file.importedAt ? formatDateTime(new Date(file.importedAt)) : "-";
+      const qsh = [file.quantieme ? `Q${String(file.quantieme).padStart(3, "0")}` : "?", file.semaine ? `S${file.semaine}` : "?", file.heureFichier || "-"]
+        .filter(Boolean)
+        .join(" / ");
+
+      tr.innerHTML = `
+        <td>${file.fileName}</td>
+        <td>${qsh}</td>
+        <td>${file.rowCount || 0}</td>
+        <td>${dateImport}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+  const countEl = document.getElementById("importResultsCount");
+  if (countEl) {
+    const total = state.excelRecords ? state.excelRecords.length : 0;
+    countEl.textContent = `${total} enregistrement(s) importés.`;
+  }
+}
+
+function populateImportFilters() {
+  const lineSelect = document.getElementById("importLineFilter");
+  if (!lineSelect || lineSelect.dataset.populated === "1") return;
+  lineSelect.dataset.populated = "1";
+
+  LINES.forEach(line => {
+    const opt = document.createElement("option");
+    opt.value = line;
+    opt.textContent = line;
+    lineSelect.appendChild(opt);
+  });
+}
+
+function refreshImportSearch() {
+  const table = document.getElementById("importResultsTable");
+  if (!table) return;
+
+  const query = (document.getElementById("importSearchInput")?.value || "").trim().toLowerCase();
+  const equipe = (document.getElementById("importEquipeFilter")?.value || "").toUpperCase();
+  const ligne = document.getElementById("importLineFilter")?.value || "";
+
+  let results = state.excelRecords || [];
+
+  if (equipe) {
+    results = results.filter(r => (r.equipe || "").toUpperCase() === equipe);
+  }
+
+  if (ligne) {
+    results = results.filter(r => (r.ligne || "") === ligne);
+  }
+
+  if (query) {
+    results = results.filter(r => {
+      return [r.article, r.machine, r.commentaire, r.type, r.dateHeure, r.nomPersonnel]
+        .filter(Boolean)
+        .some(val => String(val).toLowerCase().includes(query));
+    });
+  }
+
+  const tbody = table.querySelector("tbody");
+  tbody.innerHTML = "";
+
+  results.slice(0, 200).forEach(rec => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${rec.dateHeure || ""}</td>
+      <td>${rec.equipe || ""}</td>
+      <td>${rec.ligne || ""}</td>
+      <td>${rec.machine || ""}</td>
+      <td>${rec.quantite ?? ""}</td>
+      <td>${rec.arretMinutes ?? ""}</td>
+      <td>${rec.cadence ?? ""}</td>
+      <td>${rec.commentaire || ""}</td>
+      <td>${rec.fileName}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const infoEl = document.getElementById("importResultsCount");
+  if (infoEl) {
+    const total = state.excelRecords ? state.excelRecords.length : 0;
+    infoEl.textContent = `${results.length} résultat(s) filtrés / ${total} importés (max 200 affichés).`;
+  }
+}
+
+function bindExcelImport() {
+  const btn = document.getElementById("importExcelBtn");
+  const input = document.getElementById("excelInput");
+  if (!btn || !input) return;
+
+  populateImportFilters();
+
+  btn.addEventListener("click", async () => {
+    const files = Array.from(input.files || []);
+    setImportStatus("Import en cours...", "");
+    await importExcelFiles(files);
+    input.value = "";
+  });
+
+  const searchInput = document.getElementById("importSearchInput");
+  const equipeFilter = document.getElementById("importEquipeFilter");
+  const lineFilter = document.getElementById("importLineFilter");
+
+  if (searchInput) searchInput.addEventListener("input", refreshImportSearch);
+  if (equipeFilter) equipeFilter.addEventListener("change", refreshImportSearch);
+  if (lineFilter) lineFilter.addEventListener("change", refreshImportSearch);
+
+  refreshImportLog();
+  refreshImportSearch();
 }
 
 /******************************
@@ -914,8 +1201,11 @@ function refreshAtelierChart() {
 function refreshAtelierView() {
   const container = document.getElementById("atelier-lines-summary");
   if (!container) return;
-  
+
   container.innerHTML = "";
+
+  refreshImportLog();
+  refreshImportSearch();
 
   // cartes lignes
   LINES.forEach(line => {
@@ -1894,6 +2184,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initHeaderDate();
   initEquipeSelector();
   initNav();
+  bindExcelImport();
   initLinesSidebar();
   bindProductionForm();
   initArretsForm();
