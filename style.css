@@ -70,6 +70,20 @@ body {
   color: var(--text-muted);
 }
 
+.local-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(98, 211, 139, 0.12);
+  color: var(--success);
+  font-size: 0.78rem;
+  border: 1px solid rgba(98, 211, 139, 0.5);
+  width: fit-content;
+}
+
 .header-info {
   font-size: 0.85rem;
   color: var(--accent);
@@ -995,6 +1009,66 @@ body.light-mode .calc-btn.equals:hover {
 body.light-mode .helper-text {
   color: #4a5568;
   font-weight: 500;
+}
+
+/* IMPORT EXCEL */
+.import-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+.import-actions input[type="file"] {
+  max-width: 260px;
+}
+
+.import-status {
+  margin: 8px 0 4px;
+  font-weight: 600;
+}
+
+.import-status.success {
+  color: #16a34a;
+}
+
+.import-status.warning {
+  color: #d97706;
+}
+
+.import-status.error {
+  color: #dc2626;
+}
+
+.manager-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.field-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px dashed var(--border-color, #ccc);
+  border-radius: 8px;
+  background: var(--card-bg, #0f172a);
+}
+
+.field-selector label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.import-filters {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: flex-end;
 }
 
 /* LANDSCAPE MODE AUTO */
