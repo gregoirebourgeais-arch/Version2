@@ -84,6 +84,35 @@ let arretMachineEl = null;
 let atelierChart = null;
 let historyChart = null;
 
+// Base manager (IndexedDB)
+let managerDb = null;
+const MANAGER_FIELDS = [
+  { key: "dateHeure", label: "Date/Heure" },
+  { key: "equipe", label: "Équipe" },
+  { key: "ligne", label: "Ligne" },
+  { key: "sousLigne", label: "Sous-ligne" },
+  { key: "machine", label: "Machine" },
+  { key: "quantite", label: "Quantité" },
+  { key: "arretMinutes", label: "Arrêt (min)" },
+  { key: "cadence", label: "Cadence" },
+  { key: "commentaire", label: "Commentaire" },
+  { key: "article", label: "Article" },
+  { key: "nomPersonnel", label: "Personnel" },
+  { key: "motifPersonnel", label: "Motif personnel" },
+  { key: "visa", label: "Visa" },
+  { key: "validee", label: "Validée" },
+  { key: "fileName", label: "Fichier" },
+];
+
+const managerSearchState = {
+  text: "",
+  equipe: "",
+  ligne: "",
+  fields: new Set(MANAGER_FIELDS.map(f => f.key)),
+  sortField: "dateHeure",
+  sortDir: "desc",
+};
+
 /******************************
  *   PARTIE 1 / 4 – FONCTIONS DATE
  ******************************/
@@ -367,6 +396,355 @@ async function importExcelFiles(files) {
   refreshImportSearch();
 }
 
+/********************************************
+ *   PARTIE 1B – BASE MANAGER (INDEXEDDB)
+ ********************************************/
+
+function initManagerDb() {
+  if (!window.Dexie) {
+    console.warn("Dexie manquant : base manager inactive");
+    return null;
+  }
+
+  const db = new Dexie("atelier_manager_db");
+  db.version(1).stores({
+    records:
+      "++id,dateHeure,equipe,ligne,sousLigne,machine,article,nomPersonnel,motifPersonnel,commentaire,fileName,quantieme,semaine,visa,validee,type",
+    imports: "++id,&fileName,importedAt,quantieme,semaine,heureFichier,rowCount",
+  });
+
+  return db;
+}
+
+function setManagerStatus(message, variant = "") {
+  const el = document.getElementById("managerImportStatus");
+  if (!el) return;
+  el.textContent = message;
+  el.className = "import-status helper-text";
+  if (variant) el.classList.add(variant);
+}
+
+async function refreshManagerImports() {
+  if (!managerDb) return;
+  const tbody = document.getElementById("managerImportsTable")?.querySelector("tbody");
+  if (!tbody) return;
+
+  const imports = await managerDb.imports.orderBy("importedAt").reverse().toArray();
+  tbody.innerHTML = "";
+
+  imports.forEach(file => {
+    const tr = document.createElement("tr");
+    const dateImport = file.importedAt ? formatDateTime(new Date(file.importedAt)) : "-";
+    const qsh = [
+      file.quantieme ? `Q${String(file.quantieme).padStart(3, "0")}` : "?",
+      file.semaine ? `S${file.semaine}` : "?",
+      file.heureFichier || "-",
+    ]
+      .filter(Boolean)
+      .join(" / ");
+
+    tr.innerHTML = `
+      <td>${file.fileName}</td>
+      <td>${qsh}</td>
+      <td>${file.rowCount || 0}</td>
+      <td>${dateImport}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderManagerFieldSelector() {
+  const container = document.getElementById("managerFieldSelector");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  MANAGER_FIELDS.forEach(field => {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = managerSearchState.fields.has(field.key);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) managerSearchState.fields.add(field.key);
+      else managerSearchState.fields.delete(field.key);
+      refreshManagerResults();
+    });
+
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(field.label));
+    container.appendChild(label);
+  });
+}
+
+async function populateManagerLineFilter() {
+  const select = document.getElementById("managerLineFilter");
+  if (!select) return;
+
+  const previous = select.value;
+  select.innerHTML = "";
+
+  const baseOption = document.createElement("option");
+  baseOption.value = "";
+  baseOption.textContent = "Toutes";
+  select.appendChild(baseOption);
+
+  const uniqueLines = new Set(LINES);
+  if (managerDb) {
+    const lines = await managerDb.records.orderBy("ligne").uniqueKeys();
+    lines.forEach(l => uniqueLines.add(l));
+  }
+
+  Array.from(uniqueLines)
+    .sort()
+    .forEach(line => {
+      const opt = document.createElement("option");
+      opt.value = line;
+      opt.textContent = line;
+      select.appendChild(opt);
+    });
+
+  if (previous && uniqueLines.has(previous)) {
+    select.value = previous;
+  }
+}
+
+function populateManagerSortOptions() {
+  const sortSelect = document.getElementById("managerSortField");
+  if (!sortSelect || sortSelect.dataset.populated === "1") return;
+
+  MANAGER_FIELDS.forEach(field => {
+    const opt = document.createElement("option");
+    opt.value = field.key;
+    opt.textContent = field.label;
+    sortSelect.appendChild(opt);
+  });
+
+  sortSelect.value = managerSearchState.sortField;
+  sortSelect.dataset.populated = "1";
+}
+
+function getSearchableFields() {
+  const selected = [...managerSearchState.fields];
+  return selected.length ? selected : MANAGER_FIELDS.map(f => f.key);
+}
+
+async function refreshManagerResults() {
+  if (!managerDb) return;
+  const table = document.getElementById("managerResultsTable");
+  if (!table) return;
+
+  let rows = await managerDb.records.toArray();
+
+  const query = managerSearchState.text.trim().toLowerCase();
+  const fields = getSearchableFields();
+
+  if (managerSearchState.equipe) {
+    rows = rows.filter(
+      r => (r.equipe || "").toUpperCase() === managerSearchState.equipe.toUpperCase()
+    );
+  }
+
+  if (managerSearchState.ligne) {
+    rows = rows.filter(r => (r.ligne || "") === managerSearchState.ligne);
+  }
+
+  if (query) {
+    rows = rows.filter(r =>
+      fields.some(key => (r[key] ?? "").toString().toLowerCase().includes(query))
+    );
+  }
+
+  const { sortField, sortDir } = managerSearchState;
+  rows.sort((a, b) => {
+    const av = a[sortField] ?? "";
+    const bv = b[sortField] ?? "";
+
+    if (av === bv) return 0;
+    if (av > bv) return sortDir === "asc" ? 1 : -1;
+    return sortDir === "asc" ? -1 : 1;
+  });
+
+  const tbody = table.querySelector("tbody");
+  tbody.innerHTML = "";
+
+  const max = 500;
+  rows.slice(0, max).forEach(row => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${row.dateHeure || ""}</td>
+      <td>${row.equipe || ""}</td>
+      <td>${row.ligne || ""}</td>
+      <td>${row.sousLigne || ""}</td>
+      <td>${row.machine || ""}</td>
+      <td>${row.quantite ?? ""}</td>
+      <td>${row.arretMinutes ?? ""}</td>
+      <td>${row.cadence ?? ""}</td>
+      <td>${row.commentaire || ""}</td>
+      <td>${row.article || ""}</td>
+      <td>${row.nomPersonnel || ""}</td>
+      <td>${row.motifPersonnel || ""}</td>
+      <td>${row.fileName || ""}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const infoEl = document.getElementById("managerResultsCount");
+  if (infoEl) {
+    infoEl.textContent = `${rows.length} résultat(s) / ${await managerDb.records.count()} dans la base (affichage limité à ${max}).`;
+  }
+}
+
+async function importManagerFiles(files) {
+  if (!managerDb) return;
+  if (!files.length) {
+    setManagerStatus("Sélectionne au moins un fichier Excel.", "warning");
+    return;
+  }
+
+  let totalRows = 0;
+  const skipped = [];
+
+  for (const file of files) {
+    const existing = await managerDb.imports.get(file.name);
+    if (existing) {
+      skipped.push(file.name);
+      continue;
+    }
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[firstSheet];
+      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+      const meta = {
+        ...parseFileNameInfo(file.name),
+        fileName: file.name,
+        importedAt: new Date().toISOString(),
+      };
+
+      const normalizedRows = rawRows
+        .filter(row => Object.values(row).some(v => v !== null && v !== ""))
+        .map(row => normalizeExcelRow(row, meta));
+
+      if (!normalizedRows.length) continue;
+
+      await managerDb.transaction("rw", managerDb.records, managerDb.imports, async () => {
+        await managerDb.records.bulkAdd(normalizedRows);
+        await managerDb.imports.add({
+          fileName: file.name,
+          importedAt: meta.importedAt,
+          quantieme: meta.quantieme,
+          semaine: meta.semaine,
+          heureFichier: meta.heureFichier,
+          rowCount: normalizedRows.length,
+        });
+      });
+
+      totalRows += normalizedRows.length;
+    } catch (e) {
+      console.error("Manager import error", e);
+      setManagerStatus(`Erreur sur ${file.name} : ${e.message || e}`, "error");
+    }
+  }
+
+  const parts = [];
+  if (totalRows > 0) parts.push(`${totalRows} ligne(s) ajoutée(s)`);
+  if (skipped.length) parts.push(`fichiers ignorés : ${skipped.join(", ")}`);
+
+  const variant = totalRows > 0 ? "success" : skipped.length ? "warning" : "";
+  setManagerStatus(parts.length ? parts.join(" • ") : "Aucune ligne ajoutée.", variant);
+
+  await refreshManagerImports();
+  await refreshManagerResults();
+  await populateManagerLineFilter();
+}
+
+async function resetManagerDb() {
+  if (!managerDb) return;
+  await managerDb.transaction("rw", managerDb.records, managerDb.imports, async () => {
+    await managerDb.records.clear();
+    await managerDb.imports.clear();
+  });
+  setManagerStatus("Base vidée.", "warning");
+  await refreshManagerImports();
+  await refreshManagerResults();
+  await populateManagerLineFilter();
+}
+
+function bindManagerArea() {
+  managerDb = initManagerDb();
+  if (!managerDb) return;
+
+  renderManagerFieldSelector();
+  populateManagerSortOptions();
+  populateManagerLineFilter();
+
+  const input = document.getElementById("managerExcelInput");
+  const btn = document.getElementById("managerImportBtn");
+  const resetBtn = document.getElementById("managerResetBtn");
+
+  if (btn && input) {
+    btn.addEventListener("click", async () => {
+      const files = Array.from(input.files || []);
+      setManagerStatus("Import en cours...");
+      await importManagerFiles(files);
+      input.value = "";
+    });
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener("click", async () => {
+      const confirmReset = confirm("Vider la base manager ? (sans toucher aux autres formulaires)");
+      if (confirmReset) await resetManagerDb();
+    });
+  }
+
+  const searchInput = document.getElementById("managerSearchInput");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      managerSearchState.text = searchInput.value;
+      refreshManagerResults();
+    });
+  }
+
+  const equipeFilter = document.getElementById("managerEquipeFilter");
+  if (equipeFilter) {
+    equipeFilter.addEventListener("change", () => {
+      managerSearchState.equipe = equipeFilter.value;
+      refreshManagerResults();
+    });
+  }
+
+  const lineFilter = document.getElementById("managerLineFilter");
+  if (lineFilter) {
+    lineFilter.addEventListener("change", () => {
+      managerSearchState.ligne = lineFilter.value;
+      refreshManagerResults();
+    });
+  }
+
+  const sortSelect = document.getElementById("managerSortField");
+  if (sortSelect) {
+    sortSelect.addEventListener("change", () => {
+      managerSearchState.sortField = sortSelect.value;
+      refreshManagerResults();
+    });
+  }
+
+  const sortDir = document.getElementById("managerSortDir");
+  if (sortDir) {
+    sortDir.addEventListener("change", () => {
+      managerSearchState.sortDir = sortDir.value;
+      refreshManagerResults();
+    });
+  }
+
+  refreshManagerImports();
+  refreshManagerResults();
+}
+
 function refreshImportLog() {
   const tbody = document.getElementById("importsTableBody");
   if (!tbody) return;
@@ -575,6 +953,11 @@ function showSection(section) {
   else if (section === "arrets") refreshArretsView();
   else if (section === "organisation") refreshOrganisationView();
   else if (section === "personnel") refreshPersonnelView();
+  else if (section === "manager") {
+    populateManagerLineFilter();
+    refreshManagerImports();
+    refreshManagerResults();
+  }
 }
 
 function initNav() {
@@ -2185,6 +2568,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initEquipeSelector();
   initNav();
   bindExcelImport();
+  bindManagerArea();
   initLinesSidebar();
   bindProductionForm();
   initArretsForm();

@@ -1041,6 +1041,31 @@ body.light-mode .helper-text {
   color: #dc2626;
 }
 
+.manager-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.field-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px dashed var(--border-color, #ccc);
+  border-radius: 8px;
+  background: var(--card-bg, #0f172a);
+}
+
+.field-selector label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
 .import-filters {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   align-items: flex-end;
