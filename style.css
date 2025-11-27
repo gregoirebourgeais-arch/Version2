@@ -47,7 +47,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 14px;
+  padding: 8px 12px;
   background: linear-gradient(120deg, #0f1f33, #07101f);
   border-bottom: var(--border-subtle);
   position: sticky;
@@ -62,7 +62,7 @@ body {
 
 .app-main-title {
   font-weight: 600;
-  font-size: 1.05rem;
+  font-size: 1rem;
 }
 
 .app-sub-title {
@@ -71,29 +71,15 @@ body {
 }
 
 body.compact-header .app-header {
-  padding: 8px 10px;
+  padding: 4px 10px;
 }
 
 body.compact-header .app-main-title {
-  font-size: 0.98rem;
+  font-size: 0.9rem;
 }
 
 body.compact-header .app-sub-title {
-  font-size: 0.75rem;
-}
-
-.local-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(98, 211, 139, 0.12);
-  color: var(--success);
-  font-size: 0.78rem;
-  border: 1px solid rgba(98, 211, 139, 0.5);
-  width: fit-content;
+  font-size: 0.7rem;
 }
 
 .header-info {
@@ -142,6 +128,29 @@ body.compact-header .app-sub-title {
 
 .nav-btn:hover {
   background: rgba(77, 163, 255, 0.1);
+}
+
+.history-files-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.history-file-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+#history-files-table th,
+#history-files-table td {
+  white-space: nowrap;
+}
+
+#historyPareto {
+  display: block;
+  min-height: 320px;
 }
 
 .icon-btn {
@@ -1084,15 +1093,6 @@ body.light-mode .helper-text {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 16px;
   margin-bottom: 16px;
-}
-
-.manager-locked {
-  padding: 12px 14px;
-  margin: 12px 0;
-  border: 1px solid var(--border-color, #ccc);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-muted, #cbd5e1);
 }
 
 .hidden {

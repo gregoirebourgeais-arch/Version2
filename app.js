@@ -83,11 +83,16 @@ let arretMachineEl = null;
 // Graphiques
 let atelierChart = null;
 let historyChart = null;
+let historyParetoChart = null;
 
 // Base manager (classeur Excel historisé)
 const MANAGER_MASTER_KEY = "manager_master_excel_b64";
 const MANAGER_IMPORT_LOG_KEY = "manager_import_log_v1";
 const MANAGER_PASSWORD_KEY = "manager_password_hash_v1";
+const MANAGER_DIR_DB = "manager_dir_handle_db";
+const MANAGER_DIR_STORE = "handles";
+const MANAGER_DIR_KEY = "manager_import_dir";
+const MANAGER_AUTO_SCAN_MS = 30 * 60 * 1000;
 
 const MANAGER_FIELDS = [
   { key: "type", label: "Type" },
@@ -152,6 +157,8 @@ const managerSearchState = {
 let managerDataset = [];
 let managerImportLog = [];
 let managerUnlocked = false;
+let managerDirHandle = null;
+let managerAutoScanTimer = null;
 
 /******************************
  *   PARTIE 1 / 4 – FONCTIONS DATE
@@ -450,6 +457,14 @@ function setManagerStatus(message, variant = "") {
   if (variant) el.classList.add(variant);
 }
 
+function setManagerFolderStatus(message, variant = "") {
+  const el = document.getElementById("managerFolderStatus");
+  if (!el) return;
+  el.textContent = message;
+  el.className = "import-status helper-text";
+  if (variant) el.classList.add(variant);
+}
+
 function setManagerSecurityStatus(message, variant = "") {
   ["managerSecurityStatus", "settingsSecurityStatus"].forEach(id => {
     const el = document.getElementById(id);
@@ -518,6 +533,52 @@ function saveManagerImportLog() {
   localStorage.setItem(MANAGER_IMPORT_LOG_KEY, JSON.stringify(managerImportLog));
 }
 
+function openDirHandleDB() {
+  return new Promise(resolve => {
+    const req = indexedDB.open(MANAGER_DIR_DB, 1);
+    req.onerror = () => resolve(null);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(MANAGER_DIR_STORE)) {
+        db.createObjectStore(MANAGER_DIR_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+  });
+}
+
+async function saveManagerDirectoryHandle(handle) {
+  try {
+    const db = await openDirHandleDB();
+    if (!db) return false;
+    return await new Promise(resolve => {
+      const tx = db.transaction(MANAGER_DIR_STORE, "readwrite");
+      tx.objectStore(MANAGER_DIR_STORE).put(handle, MANAGER_DIR_KEY);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  } catch (e) {
+    console.error("Impossible d'enregistrer le dossier import", e);
+    return false;
+  }
+}
+
+async function loadManagerDirectoryHandle() {
+  try {
+    const db = await openDirHandleDB();
+    if (!db) return null;
+    return await new Promise(resolve => {
+      const tx = db.transaction(MANAGER_DIR_STORE, "readonly");
+      const req = tx.objectStore(MANAGER_DIR_STORE).get(MANAGER_DIR_KEY);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) {
+    console.error("Impossible de relire le dossier import", e);
+    return null;
+  }
+}
+
 async function hashPassword(pwd) {
   const enc = new TextEncoder().encode(pwd);
   const hashBuffer = await crypto.subtle.digest("SHA-256", enc);
@@ -550,21 +611,21 @@ async function setManagerPassword(pwd) {
 
 function updateManagerLockUI() {
   const content = document.getElementById("managerContent");
-  const overlay = document.getElementById("managerLockedOverlay");
-  const unlockForm = document.getElementById("managerUnlockForm");
   const resultsCard = document.getElementById("managerResultsCard");
+  const lockInfo = document.getElementById("managerLockInfo");
 
   const hasPassword = Boolean(getStoredPasswordHash());
-  if (unlockForm) unlockForm.style.display = hasPassword ? "block" : "none";
+  const locked = hasPassword && !managerUnlocked;
 
-  if (managerUnlocked || !hasPassword) {
-    overlay?.classList.add("hidden");
-    if (content) content.style.display = "grid";
-    if (resultsCard) resultsCard.style.display = "block";
-  } else {
-    overlay?.classList.remove("hidden");
+  if (locked) {
     if (content) content.style.display = "none";
     if (resultsCard) resultsCard.style.display = "none";
+    if (lockInfo) lockInfo.style.display = "block";
+    setManagerStatus("Accès manager verrouillé. Ouvre Paramètres pour déverrouiller.", "warning");
+  } else {
+    if (lockInfo) lockInfo.style.display = "none";
+    if (content) content.style.display = "grid";
+    if (resultsCard) resultsCard.style.display = "block";
   }
 }
 
@@ -939,18 +1000,81 @@ async function importManagerFiles(files) {
   populateManagerLineFilter();
 }
 
-async function scanFolderForManagerFiles() {
+async function ensureDirectoryPermission(dirHandle) {
+  if (!dirHandle) return false;
+  const opts = { mode: "read" };
+  if ((await dirHandle.queryPermission(opts)) === "granted") return true;
+  const perm = await dirHandle.requestPermission(opts);
+  return perm === "granted";
+}
+
+async function requestManagerDirectory() {
+  if (!window.showDirectoryPicker) return null;
+  try {
+    const handle = await window.showDirectoryPicker({ startIn: "documents" });
+    const ok = await ensureDirectoryPermission(handle);
+    if (!ok) return null;
+    managerDirHandle = handle;
+    await saveManagerDirectoryHandle(handle);
+    setManagerFolderStatus(`Dossier mémorisé : ${handle.name}`, "success");
+    return handle;
+  } catch (e) {
+    console.error("Sélection du dossier import annulée", e);
+    return null;
+  }
+}
+
+function scheduleManagerAutoScan() {
+  if (managerAutoScanTimer) clearInterval(managerAutoScanTimer);
+  if (!managerDirHandle) return;
+  managerAutoScanTimer = setInterval(() => {
+    scanFolderForManagerFiles(managerDirHandle, true);
+  }, MANAGER_AUTO_SCAN_MS);
+}
+
+async function restoreSavedManagerFolder() {
+  const savedHandle = await loadManagerDirectoryHandle();
+  if (!savedHandle) return;
+  const ok = await ensureDirectoryPermission(savedHandle);
+  if (!ok) {
+    setManagerFolderStatus("Le dossier mémorisé nécessite une nouvelle autorisation.", "warning");
+    return;
+  }
+  managerDirHandle = savedHandle;
+  setManagerFolderStatus(`Dossier mémorisé : ${savedHandle.name}`, "success");
+  scheduleManagerAutoScan();
+  await scanFolderForManagerFiles(savedHandle, true);
+}
+
+async function scanFolderForManagerFiles(dirHandle = null, silent = false) {
   const input = document.getElementById("managerExcelInput");
   if (!window.showDirectoryPicker) {
-    setManagerStatus("Ton navigateur ne permet pas de scanner un dossier. Utilise l'import manuel ci-dessous.", "warning");
-    input?.click();
+    if (!silent) {
+      setManagerStatus("Ton navigateur ne permet pas de scanner un dossier. Utilise l'import manuel ci-dessous.", "warning");
+      input?.click();
+    }
     return;
   }
 
+  let handle = dirHandle || managerDirHandle;
+  if (!handle) {
+    if (!silent) setManagerStatus("Choisis le dossier (ex : honor200 ➜ Documents) pour trouver les fichiers.", "warning");
+    handle = await requestManagerDirectory();
+  }
+  if (!handle) return;
+
+  const authorized = await ensureDirectoryPermission(handle);
+  if (!authorized) {
+    if (!silent) setManagerStatus("Autorise l'accès au dossier pour continuer.", "error");
+    return;
+  }
+
+  managerDirHandle = handle;
+  scheduleManagerAutoScan();
+
   try {
-    const dirHandle = await window.showDirectoryPicker();
     const files = [];
-    for await (const entry of dirHandle.values()) {
+    for await (const entry of handle.values()) {
       if (entry.kind === "file" && /\.xlsx?$/i.test(entry.name)) {
         const file = await entry.getFile();
         files.push(file);
@@ -958,7 +1082,7 @@ async function scanFolderForManagerFiles() {
     }
 
     if (!files.length) {
-      setManagerStatus("Aucun fichier Excel trouvé dans ce dossier.", "warning");
+      if (!silent) setManagerStatus("Aucun fichier Excel trouvé dans ce dossier.", "warning");
       return;
     }
 
@@ -966,15 +1090,15 @@ async function scanFolderForManagerFiles() {
     const freshFiles = files.filter(f => !importedNames.has(f.name));
 
     if (!freshFiles.length) {
-      setManagerStatus("Tout est déjà importé pour ce dossier.", "success");
+      if (!silent) setManagerStatus("Tout est déjà importé pour ce dossier.", "success");
       return;
     }
 
-    setManagerStatus(`Import en cours (${freshFiles.length} nouveau(x) fichier(s))...`);
+    if (!silent) setManagerStatus(`Import en cours (${freshFiles.length} nouveau(x) fichier(s))...`);
     await importManagerFiles(freshFiles);
   } catch (e) {
     console.error("Scan dossier échoué", e);
-    setManagerStatus("Impossible de scanner ce dossier (permissions ?)", "error");
+    if (!silent) setManagerStatus("Impossible de scanner ce dossier (permissions ?)", "error");
   }
 }
 
@@ -1021,6 +1145,7 @@ function bindManagerArea() {
   populateManagerSortOptions();
   populateManagerLineFilter();
   updateManagerLockUI();
+  setManagerFolderStatus("Sélectionne honor200 ➜ Documents pour activer la mise à jour auto.");
 
   const input = document.getElementById("managerExcelInput");
   const btn = document.getElementById("managerImportBtn");
@@ -1095,31 +1220,7 @@ function bindManagerArea() {
     });
   }
 
-  const unlockForm = document.getElementById("managerUnlockForm");
-  const setPwdForm = document.getElementById("managerSetPasswordForm");
-  const unlockInput = document.getElementById("managerUnlockInput");
-  const pwdInput = document.getElementById("managerPasswordInput");
-
-  if (unlockForm) {
-    unlockForm.addEventListener("submit", async e => {
-      e.preventDefault();
-      const pwd = unlockInput?.value || "";
-      await handleUnlock(pwd);
-      if (unlockInput) unlockInput.value = "";
-    });
-  }
-
-  if (setPwdForm) {
-    setPwdForm.addEventListener("submit", async e => {
-      e.preventDefault();
-      const pwd = pwdInput?.value || "";
-      const ok = await setManagerPassword(pwd);
-      if (ok && !managerUnlocked) await handleUnlock(pwd);
-      if (pwdInput) pwdInput.value = "";
-      updateManagerLockUI();
-    });
-  }
-
+  restoreSavedManagerFolder();
   refreshManagerImports();
   refreshManagerResults();
 }
@@ -2036,8 +2137,9 @@ function refreshAtelierView() {
 function initHistoriqueEquipes() {
   const select = document.getElementById("historySelect");
   if (!select) return;
-  
+
   refreshHistorySelect();
+  bindHistoryExportButtons();
 
   select.addEventListener("change", () => {
     if (select.value === "") {
@@ -2054,7 +2156,7 @@ function initHistoriqueEquipes() {
 function refreshHistorySelect() {
   const select = document.getElementById("historySelect");
   if (!select) return;
-  
+
   select.innerHTML = `<option value="">-- Sélectionner --</option>`;
 
   archives.forEach((snap, idx) => {
@@ -2075,10 +2177,152 @@ function clearHistoryView() {
     if (tbody) tbody.innerHTML = "";
   }
 
+  const filesTable = document.getElementById("history-files-table");
+  if (filesTable) {
+    const tbody = filesTable.querySelector("tbody");
+    if (tbody) tbody.innerHTML = "";
+  }
+
+  const filesCard = document.getElementById("history-files-card");
+  if (filesCard) filesCard.style.display = "none";
+
+  const paretoCard = document.getElementById("history-pareto-card");
+  if (paretoCard) paretoCard.style.display = "none";
+
+  if (historyParetoChart) {
+    historyParetoChart.destroy();
+    historyParetoChart = null;
+  }
+
   if (historyChart) {
     historyChart.destroy();
     historyChart = null;
   }
+}
+
+function getSelectedArchive() {
+  const select = document.getElementById("historySelect");
+  if (!select || !select.value) return null;
+  const idx = Number(select.value);
+  return archives[idx] || null;
+}
+
+function exportSelectedArchive(kind) {
+  const snap = getSelectedArchive();
+  if (!snap || !snap.state) {
+    alert("Sélectionne d'abord une archive.");
+    return;
+  }
+
+  const base = `Eq${snap.equipe || "X"}_Q${snap.quantieme || "000"}_S${snap.week || "00"}`;
+  const timePart = snap.savedAt && snap.savedAt.includes("h") ? snap.savedAt.split(" ").pop() : "";
+  const filenameBase = `${base}_${timePart || ""}`.replace(/\s+/g, "").replace(/[*/\\:?"<>|]/g, "-");
+
+  if (kind === "data") {
+    exportDataToExcel(snap.state, `${filenameBase}_DATA.xlsx`);
+  } else {
+    exportPresentationToExcel(snap.state, `${filenameBase}_PRESENTATION.xlsx`);
+  }
+}
+
+function bindHistoryExportButtons() {
+  const dataBtn = document.getElementById("historyExportDataBtn");
+  const presBtn = document.getElementById("historyExportPresBtn");
+
+  dataBtn?.addEventListener("click", () => exportSelectedArchive("data"));
+  presBtn?.addEventListener("click", () => exportSelectedArchive("presentation"));
+}
+
+function renderHistoryFiles(files = []) {
+  const card = document.getElementById("history-files-card");
+  const table = document.getElementById("history-files-table");
+  if (!card || !table) return;
+
+  const tbody = table.querySelector("tbody");
+  if (!tbody) return;
+
+  card.style.display = "block";
+  tbody.innerHTML = "";
+
+  if (!files.length) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="4">Aucun fichier renseigné pour cette archive.</td>`;
+    tbody.appendChild(tr);
+    return;
+  }
+
+  const rows = [...files].sort((a, b) => new Date(b.importedAt) - new Date(a.importedAt));
+  rows.forEach(file => {
+    const tr = document.createElement("tr");
+    const qsh = [
+      file.quantieme ? `Q${String(file.quantieme).padStart(3, "0")}` : "?",
+      file.semaine ? `S${file.semaine}` : "?",
+      file.heureFichier || "-",
+    ].filter(Boolean).join(" / ");
+    const dateImport = file.importedAt ? formatDateTime(new Date(file.importedAt)) : "-";
+
+    tr.innerHTML = `
+      <td>${file.fileName}</td>
+      <td>${qsh}</td>
+      <td>${file.rowCount || 0}</td>
+      <td>${dateImport}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderHistoryPareto(arrets = []) {
+  const card = document.getElementById("history-pareto-card");
+  const canvas = document.getElementById("historyPareto");
+  if (!card || !canvas || typeof Chart === "undefined") return;
+
+  if (!arrets.length) {
+    card.style.display = "none";
+    if (historyParetoChart) {
+      historyParetoChart.destroy();
+      historyParetoChart = null;
+    }
+    return;
+  }
+
+  const buckets = {};
+  arrets.forEach(r => {
+    const key = r.comment ? r.comment.trim() : (r.machine || r.sousLigne || r.line || "Autre");
+    const dur = Number(r.duration) || 0;
+    if (!buckets[key]) buckets[key] = 0;
+    buckets[key] += dur;
+  });
+
+  const sorted = Object.entries(buckets)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+
+  const labels = sorted.map(([k]) => k);
+  const data = sorted.map(([, v]) => v);
+
+  if (historyParetoChart) historyParetoChart.destroy();
+
+  historyParetoChart = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "Durée cumulée (min)",
+        data,
+        backgroundColor: "rgba(255, 99, 132, 0.6)",
+        borderColor: "rgba(255, 99, 132, 1)",
+        borderWidth: 1,
+      }],
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { x: { beginAtZero: true } },
+    },
+  });
+
+  card.style.display = "block";
 }
 
 function refreshHistoryView(snapshot) {
@@ -2130,6 +2374,9 @@ function refreshHistoryView(snapshot) {
         });
     }
   }
+
+  renderHistoryPareto(savedState.arrets || []);
+  renderHistoryFiles(savedState.excelFiles || []);
 
   // Graphique Chart.js
   const chartCanvas = document.getElementById("historyChart");

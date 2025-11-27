@@ -37,7 +37,6 @@
     <div class="app-title">
       <span class="app-main-title">Atelier PPNC</span>
       <span class="app-sub-title">Suivi Production & Arrêts</span>
-      <span class="local-badge" title="Données stockées uniquement sur cet appareil, sans synchronisation externe">Mode hors ligne · Données locales</span>
     </div>
     <div class="header-info" id="header-datetime">
       <!-- injecté JS -->
@@ -444,6 +443,32 @@
         </table>
       </div>
 
+      <div class="card" id="history-pareto-card" style="display: none;">
+        <h3>Pareto des arrêts</h3>
+        <canvas id="historyPareto"></canvas>
+      </div>
+
+      <div class="card" id="history-files-card" style="display: none;">
+        <div class="history-files-header">
+          <h3>Fichiers liés à l'archive sélectionnée</h3>
+          <div class="history-file-actions">
+            <button id="historyExportDataBtn" class="secondary-btn" type="button">📑 Export DATA</button>
+            <button id="historyExportPresBtn" class="secondary-btn" type="button">📈 Export PRÉSENTATION</button>
+          </div>
+        </div>
+        <table class="data-table" id="history-files-table">
+          <thead>
+            <tr>
+              <th>Fichier</th>
+              <th>Q/S/Heure</th>
+              <th>Lignes</th>
+              <th>Importé le</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
       <div class="card" id="history-organisation" style="display: none;">
         <h3>Organisation / Consignes</h3>
         <table class="data-table">
@@ -485,34 +510,8 @@
         recherche parcourt l'intégralité de l'historique stocké dans ce classeur, sans dépendance réseau.
       </p>
 
-      <div class="card" id="managerSecurityCard">
-        <h3>Accès manager sécurisé</h3>
-        <p class="helper-text">
-          Configure un mot de passe local pour protéger l'espace manager. Le mot de passe reste sur cet appareil et peut
-          être changé à tout moment.
-        </p>
-        <div class="manager-security-grid">
-          <form id="managerUnlockForm" class="manager-security-form">
-            <label for="managerUnlockInput">Mot de passe</label>
-            <div class="manager-security-actions">
-              <input type="password" id="managerUnlockInput" placeholder="Saisis le mot de passe" />
-              <button type="submit" class="primary-btn">🔓 Déverrouiller</button>
-            </div>
-          </form>
-
-          <form id="managerSetPasswordForm" class="manager-security-form">
-            <label for="managerPasswordInput">Nouveau mot de passe</label>
-            <div class="manager-security-actions">
-              <input type="password" id="managerPasswordInput" placeholder="Définis ou change le mot de passe" />
-              <button type="submit" class="secondary-btn">💾 Enregistrer</button>
-            </div>
-          </form>
-        </div>
-        <div id="managerSecurityStatus" class="import-status helper-text"></div>
-      </div>
-
-      <div class="manager-locked" id="managerLockedOverlay">
-        <p>Accès manager verrouillé. Définis ou saisis le mot de passe pour afficher les données.</p>
+      <div class="card" id="managerLockInfo" style="display: none;">
+        <p class="helper-text">Accès manager verrouillé. Ouvre Paramètres pour déverrouiller.</p>
       </div>
 
       <div class="manager-grid" id="managerContent">
@@ -520,7 +519,8 @@
           <h3>Import vers la base manager</h3>
           <p class="helper-text">
             Les fichiers peuvent arriver à tout moment (jusqu'à plusieurs par équipe). Clique sur « Mise à jour » pour
-            scanner un dossier et ne récupérer que les fichiers Excel non encore importés.
+            scanner un dossier (ex : honor200 ➜ Documents) et ne récupérer que les fichiers Excel non encore importés.
+            Une vérification automatique relance ce scan toutes les 30 minutes si le dossier est autorisé.
           </p>
           <div class="import-actions">
             <input type="file" id="managerExcelInput" accept=".xlsx,.xls" multiple />
@@ -532,6 +532,7 @@
             <button id="managerResetBtn" class="danger-btn" title="Effacer la base manager (pas les autres formulaires)">🗑️ Vider la base</button>
           </div>
           <div id="managerImportStatus" class="import-status helper-text"></div>
+          <div id="managerFolderStatus" class="import-status helper-text"></div>
 
           <div class="table-wrapper-horizontal" style="margin-top: 12px;">
             <table class="table" id="managerImportsTable">
