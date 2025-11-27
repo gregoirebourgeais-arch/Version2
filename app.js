@@ -22,6 +22,7 @@ const STORAGE_KEY = "atelier_ppnc_state_v2";
 const ARCHIVES_KEY = "atelier_ppnc_archives_v2";
 
 let archives = []; // [{ id, label, savedAt, equipe, week, quantieme, state }]
+let historyFiles = []; // Fichiers Excel présents dans honor200/Documents
 
 // Sous-lignes pour Râpé
 const ARRET_SUBLINES = {
@@ -1837,6 +1838,7 @@ function showSection(section) {
   else if (section === "organisation") refreshOrganisationView();
   else if (section === "personnel") refreshPersonnelView();
   else if (section === "historique") {
+    scanHistoryFolder({ promptIfMissing: false });
     refreshHistorySelect();
     clearHistoryView();
   }
@@ -2594,36 +2596,205 @@ function refreshAtelierView() {
  *   PARTIE 3 / 4 – HISTORIQUE ÉQUIPES
  ********************************************/
 
+function formatHistoryLabel(meta, fileName) {
+  const parts = [];
+  if (meta.formattedDate) parts.push(meta.formattedDate);
+  if (meta.heureFichier) parts.push(meta.heureFichier);
+  parts.push(fileName);
+  return parts.filter(Boolean).join(" • ");
+}
+
+function rebuildHistoryStateFromRows(rows) {
+  const toStr = v => (v === undefined || v === null ? "" : String(v).trim());
+  const toNum = v => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const rebuilt = { production: {}, arrets: [], organisation: [], personnel: [] };
+  LINES.forEach(l => rebuilt.production[l] = []);
+
+  rows.forEach(row => {
+    const type = toStr(row["Type"]).toUpperCase();
+    if (!type) return;
+
+    if (type.includes("PRODUCTION")) {
+      const line = toStr(row["Ligne"]) || "Divers";
+      if (!rebuilt.production[line]) rebuilt.production[line] = [];
+
+      rebuilt.production[line].push({
+        line,
+        dateTime: toStr(row["Date/Heure"]),
+        equipe: toStr(row["Équipe"] || row["Equipe"]),
+        start: toStr(row["Heure Début"] || row["Heure debut"]),
+        end: toStr(row["Heure Fin"]),
+        quantity: toNum(row["Quantité"] || row["Quantite"]),
+        arret: toNum(row["Arrêt (min)"] || row["Arret (min)"] || row["Arrêt"]),
+        cadence: toNum(row["Cadence"]),
+        remainingTime: toNum(row["Temps Restant"]),
+        comment: toStr(row["Commentaire"]),
+        article: toStr(row["Article"]),
+      });
+    } else if (type.includes("ARRET")) {
+      rebuilt.arrets.push({
+        line: toStr(row["Ligne"]),
+        sousLigne: toStr(row["Sous-ligne"] || row["Sous ligne"] || row["Sous_ligne"]),
+        machine: toStr(row["Machine"]),
+        duration: toNum(row["Arrêt (min)"] || row["Arret (min)"] || row["Arrêt"]),
+        comment: toStr(row["Commentaire"]),
+        article: toStr(row["Article"]),
+      });
+    } else if (type.includes("ORGANISATION")) {
+      rebuilt.organisation.push({
+        dateTime: toStr(row["Date/Heure"]),
+        equipe: toStr(row["Équipe"] || row["Equipe"]),
+        consigne: toStr(row["Commentaire"]),
+        visa: toStr(row["Visa"]),
+        valide: toStr(row["Validée"] || row["Validee"]).toLowerCase().startsWith("o"),
+      });
+    } else if (type.includes("PERSONNEL")) {
+      rebuilt.personnel.push({
+        dateTime: toStr(row["Date/Heure"]),
+        equipe: toStr(row["Équipe"] || row["Equipe"]),
+        nom: toStr(row["Nom Personnel"]),
+        motif: toStr(row["Motif Personnel"]),
+        comment: toStr(row["Commentaire"]),
+      });
+    }
+  });
+
+  return rebuilt;
+}
+
+async function loadHistorySnapshotFromFileHandle(entry) {
+  try {
+    const file = entry.getFile ? await entry.getFile() : entry;
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const firstSheet = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[firstSheet];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+    const state = rebuildHistoryStateFromRows(rows);
+    const meta = parseFileNameInfo(file.name || "");
+    const label = formatHistoryLabel(meta, file.name || "Classeur historique");
+
+    return { label, state };
+  } catch (e) {
+    console.error("Lecture historique dossier Documents impossible", e);
+    setHistoryFolderStatus(`Lecture impossible : ${e.message || e}` , "error");
+    return null;
+  }
+}
+
+async function scanHistoryFolder({ promptIfMissing = false } = {}) {
+  setHistoryFolderStatus("Scan du dossier Documents en cours…");
+
+  const dirHandle = await getPreferredDirectoryHandle({ prompt: promptIfMissing, silent: !promptIfMissing });
+  if (!dirHandle) {
+    historyFiles = [];
+    setHistoryFolderStatus("Autorise l'accès au dossier Documents pour charger les archives.", "warning");
+    refreshHistorySelect();
+    return;
+  }
+
+  const hasPerm = await ensureDirectoryPermission(dirHandle, "read");
+  if (!hasPerm) {
+    historyFiles = [];
+    setHistoryFolderStatus("Accès refusé au dossier Documents.", "error");
+    refreshHistorySelect();
+    return;
+  }
+
+  const collected = [];
+  try {
+    for await (const entry of dirHandle.values()) {
+      if (entry.kind !== "file") continue;
+      const lower = entry.name.toLowerCase();
+      if (!lower.endsWith(".xlsx")) continue;
+      if (!lower.startsWith("atelier")) continue;
+      collected.push(entry);
+    }
+  } catch (e) {
+    console.error("Scan dossier Documents impossible", e);
+    setHistoryFolderStatus("Scan du dossier Documents impossible.", "error");
+  }
+
+  historyFiles = collected.sort((a, b) => b.name.localeCompare(a.name));
+
+  if (historyFiles.length) {
+    setHistoryFolderStatus(`${historyFiles.length} fichier(s) trouvés dans ${dirHandle.name}.`, "success");
+  } else {
+    setHistoryFolderStatus(`Aucun fichier Atelier trouvé dans ${dirHandle.name}.`, "warning");
+  }
+
+  refreshHistorySelect();
+}
+
 function initHistoriqueEquipes() {
   const select = document.getElementById("historySelect");
   if (!select) return;
 
-  refreshHistorySelect();
+  select.addEventListener("change", async () => {
+    const value = select.value;
+    clearHistoryView();
 
-  select.addEventListener("change", () => {
-    if (select.value === "") {
-      clearHistoryView();
+    if (!value) return;
+
+    if (value.startsWith("file:")) {
+      const idx = Number(value.split(":")[1]);
+      const handle = historyFiles[idx];
+      if (!handle) {
+        setHistoryFolderStatus("Fichier introuvable dans le dossier Documents.", "warning");
+        return;
+      }
+      const snap = await loadHistorySnapshotFromFileHandle(handle);
+      if (snap) refreshHistoryView(snap);
       return;
     }
 
-    const snap = archives[Number(select.value)];
-    clearHistoryView();
-    refreshHistoryView(snap);
+    if (value.startsWith("archive:")) {
+      const snap = archives[Number(value.split(":")[1])];
+      if (snap) refreshHistoryView(snap);
+    }
   });
+
+  refreshHistorySelect();
+  scanHistoryFolder({ promptIfMissing: true });
 }
 
 function refreshHistorySelect() {
   const select = document.getElementById("historySelect");
   if (!select) return;
 
+  const previous = select.value;
   select.innerHTML = `<option value="">-- Sélectionner --</option>`;
+
+  historyFiles.forEach((entry, idx) => {
+    const opt = document.createElement("option");
+    opt.value = `file:${idx}`;
+    opt.textContent = formatHistoryLabel(parseFileNameInfo(entry.name), entry.name);
+    select.appendChild(opt);
+  });
 
   archives.forEach((snap, idx) => {
     const opt = document.createElement("option");
-    opt.value = idx;
+    opt.value = `archive:${idx}`;
     opt.textContent = snap.label;
     select.appendChild(opt);
   });
+
+  if (select.querySelector(`option[value="${previous}"]`)) {
+    select.value = previous;
+  } else if (select.options.length > 1) {
+    select.selectedIndex = 1;
+  }
+
+  if (select.value) {
+    select.dispatchEvent(new Event("change"));
+  } else {
+    clearHistoryView();
+  }
 }
 
 function clearHistoryView() {
