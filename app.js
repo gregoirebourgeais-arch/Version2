@@ -484,11 +484,7 @@ function setManagerStatus(message, variant = "") {
 }
 
 function setManagerFolderStatus(message, variant = "") {
-  const el = document.getElementById("managerFolderStatus");
-  if (!el) return;
-  el.textContent = message;
-  el.className = "import-status helper-text";
-  if (variant) el.classList.add(variant);
+  setSharedFolderStatus(message, variant);
 }
 
 function setManagerSecurityStatus(message, variant = "") {
@@ -499,6 +495,16 @@ function setManagerSecurityStatus(message, variant = "") {
     el.className = "import-status helper-text";
     if (variant) el.classList.add(variant);
   });
+}
+
+function refreshSettingsFolderPath() {
+  const el = document.getElementById("settingsFolderPath");
+  if (!el) return;
+  if (managerDirHandle) {
+    el.textContent = `Dossier actuel : ${managerDirHandle.name}`;
+  } else {
+    el.textContent = "Dossier actuel : Documents (par défaut)";
+  }
 }
 
 function recordToSheetRow(rec) {
@@ -567,6 +573,16 @@ function setHistoryFolderStatus(message, variant = "") {
   if (variant) el.classList.add(variant);
 }
 
+function setSharedFolderStatus(message, variant = "") {
+  ["managerFolderStatus", "settingsFolderStatus"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = message;
+    el.className = "import-status helper-text";
+    if (variant) el.classList.add(variant);
+  });
+}
+
 function openDirHandleDB() {
   return new Promise(resolve => {
     const req = indexedDB.open(MANAGER_DIR_DB, 1);
@@ -627,6 +643,7 @@ async function getPreferredDirectoryHandle({ prompt = false, write = false, sile
     if (ok) {
       managerDirHandle = savedHandle;
       setManagerFolderStatus(`Dossier mémorisé : ${savedHandle.name}`, "success");
+      refreshSettingsFolderPath();
       return savedHandle;
     }
   }
@@ -641,6 +658,7 @@ async function getPreferredDirectoryHandle({ prompt = false, write = false, sile
     await saveManagerDirectoryHandle(picked);
     setManagerFolderStatus(`Dossier mémorisé : ${picked.name}`, "success");
     setHistoryFolderStatus(`Dossier prêt : ${picked.name}`, "success");
+    refreshSettingsFolderPath();
     return picked;
   } catch (e) {
     if (!silent) console.warn("Sélection dossier annulée", e);
@@ -1363,18 +1381,34 @@ async function ensureDirectoryPermission(dirHandle, mode = "read") {
   return perm === "granted";
 }
 
-async function requestManagerDirectory() {
+async function applyDirectoryHandle(handle, { persist = true, silent = false } = {}) {
+  if (!handle) return false;
+  const ok = await ensureDirectoryPermission(handle);
+  if (!ok) return false;
+
+  managerDirHandle = handle;
+  if (persist) await saveManagerDirectoryHandle(handle);
+
+  refreshSettingsFolderPath();
+  setManagerFolderStatus(`Dossier mémorisé : ${handle.name}`, "success");
+  setHistoryFolderStatus(`Dossier prêt : ${handle.name}`, "success");
+
+  scheduleManagerAutoScan();
+  if (!silent) {
+    scanFolderForManagerFiles(handle, true);
+    scanHistoryFolder({ promptIfMissing: false });
+  }
+  return true;
+}
+
+async function requestManagerDirectory({ silent = false } = {}) {
   if (!window.showDirectoryPicker) return null;
   try {
     const handle = await window.showDirectoryPicker({ startIn: "documents" });
-    const ok = await ensureDirectoryPermission(handle);
-    if (!ok) return null;
-    managerDirHandle = handle;
-    await saveManagerDirectoryHandle(handle);
-    setManagerFolderStatus(`Dossier mémorisé : ${handle.name}`, "success");
-    return handle;
+    const applied = await applyDirectoryHandle(handle, { silent });
+    return applied ? handle : null;
   } catch (e) {
-    console.error("Sélection du dossier import annulée", e);
+    if (!silent) console.error("Sélection du dossier import annulée", e);
     return null;
   }
 }
@@ -1393,12 +1427,10 @@ async function restoreSavedManagerFolder() {
   const ok = await ensureDirectoryPermission(savedHandle);
   if (!ok) {
     setManagerFolderStatus("Le dossier mémorisé nécessite une nouvelle autorisation.", "warning");
+    refreshSettingsFolderPath();
     return;
   }
-  managerDirHandle = savedHandle;
-  setManagerFolderStatus(`Dossier mémorisé : ${savedHandle.name}`, "success");
-  scheduleManagerAutoScan();
-  await scanFolderForManagerFiles(savedHandle, true);
+  await applyDirectoryHandle(savedHandle, { silent: true });
 }
 
 async function scanFolderForManagerFiles(dirHandle = null, silent = false) {
@@ -1424,8 +1456,8 @@ async function scanFolderForManagerFiles(dirHandle = null, silent = false) {
     return;
   }
 
-  managerDirHandle = handle;
-  scheduleManagerAutoScan();
+  const applied = await applyDirectoryHandle(handle, { silent: true });
+  if (!applied) return;
 
   try {
     const files = [];
@@ -2693,7 +2725,7 @@ async function scanHistoryFolder({ promptIfMissing = false } = {}) {
   const dirHandle = await getPreferredDirectoryHandle({ prompt: promptIfMissing, silent: !promptIfMissing });
   if (!dirHandle) {
     historyFiles = [];
-    setHistoryFolderStatus("Autorise l'accès au dossier Documents pour charger les archives.", "warning");
+    setHistoryFolderStatus("Choisis le dossier Excel dans Paramètres pour charger les archives.", "warning");
     refreshHistorySelect();
     return;
   }
@@ -2701,7 +2733,7 @@ async function scanHistoryFolder({ promptIfMissing = false } = {}) {
   const hasPerm = await ensureDirectoryPermission(dirHandle, "read");
   if (!hasPerm) {
     historyFiles = [];
-    setHistoryFolderStatus("Accès refusé au dossier Documents.", "error");
+    setHistoryFolderStatus("Accès refusé : ouvre Paramètres et sélectionne le dossier Excel.", "error");
     refreshHistorySelect();
     return;
   }
@@ -3730,6 +3762,15 @@ function initSettingsPanel() {
   };
   headerToggle?.addEventListener("change", applyHeaderSize);
   applyHeaderSize();
+
+  const folderBtn = document.getElementById("settingsFolderBtn");
+  folderBtn?.addEventListener("click", async () => {
+    const handle = await requestManagerDirectory();
+    if (!handle) {
+      setHistoryFolderStatus("Aucun dossier choisi. Sélectionne un dossier valide.", "warning");
+    }
+  });
+  refreshSettingsFolderPath();
   const createForm = document.getElementById("settingsCreatePasswordForm");
   const createInput = document.getElementById("settingsCreatePassword");
   const createConfirm = document.getElementById("settingsCreatePasswordConfirm");

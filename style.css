@@ -1337,6 +1337,19 @@ body.light-mode .helper-text {
   align-items: center;
 }
 
+.settings-folder-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.folder-path {
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
 .modal {
   position: fixed;
   inset: 0;
