@@ -169,6 +169,7 @@ let managerAutoScanTimer = null;
 let managerFilteredRows = [];
 let managerParetoChart = null;
 let managerUnlockPromiseResolve = null;
+let historyScannedFiles = [];
 
 /******************************
  *   PARTIE 1 / 4 – FONCTIONS DATE
@@ -558,6 +559,14 @@ function saveManagerImportLog() {
   localStorage.setItem(MANAGER_IMPORT_LOG_KEY, JSON.stringify(managerImportLog));
 }
 
+function setHistoryFolderStatus(message, variant = "") {
+  const el = document.getElementById("historyFolderStatus");
+  if (!el) return;
+  el.textContent = message;
+  el.className = "import-status helper-text";
+  if (variant) el.classList.add(variant);
+}
+
 function openDirHandleDB() {
   return new Promise(resolve => {
     const req = indexedDB.open(MANAGER_DIR_DB, 1);
@@ -601,6 +610,56 @@ async function loadManagerDirectoryHandle() {
   } catch (e) {
     console.error("Impossible de relire le dossier import", e);
     return null;
+  }
+}
+
+async function getPreferredDirectoryHandle({ prompt = false, write = false, silent = false } = {}) {
+  const permMode = write ? "readwrite" : "read";
+
+  if (managerDirHandle) {
+    const ok = await ensureDirectoryPermission(managerDirHandle, permMode);
+    if (ok) return managerDirHandle;
+  }
+
+  const savedHandle = await loadManagerDirectoryHandle();
+  if (savedHandle) {
+    const ok = await ensureDirectoryPermission(savedHandle, permMode);
+    if (ok) {
+      managerDirHandle = savedHandle;
+      setManagerFolderStatus(`Dossier mémorisé : ${savedHandle.name}`, "success");
+      return savedHandle;
+    }
+  }
+
+  if (!prompt || !window.showDirectoryPicker) return null;
+
+  try {
+    const picked = await window.showDirectoryPicker({ startIn: "documents" });
+    const ok = await ensureDirectoryPermission(picked, permMode);
+    if (!ok) return null;
+    managerDirHandle = picked;
+    await saveManagerDirectoryHandle(picked);
+    setManagerFolderStatus(`Dossier mémorisé : ${picked.name}`, "success");
+    setHistoryFolderStatus(`Dossier prêt : ${picked.name}`, "success");
+    return picked;
+  } catch (e) {
+    if (!silent) console.warn("Sélection dossier annulée", e);
+    return null;
+  }
+}
+
+async function saveBlobToDirectory(dirHandle, filename, blob) {
+  try {
+    const ok = await ensureDirectoryPermission(dirHandle, "readwrite");
+    if (!ok) return false;
+    const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return true;
+  } catch (e) {
+    console.error("Écriture impossible dans le dossier choisi", e);
+    return false;
   }
 }
 
@@ -1071,6 +1130,7 @@ function renderManagerPareto() {
   const totalMinutes = data.reduce((s, v) => s + v, 0);
   renderManagerParetoBadges(rows.length, totalMinutes);
   card.style.display = "block";
+  card.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function refreshManagerResults() {
@@ -1240,9 +1300,9 @@ async function importManagerFiles(files) {
   populateManagerParetoLineFilter();
 }
 
-async function ensureDirectoryPermission(dirHandle) {
+async function ensureDirectoryPermission(dirHandle, mode = "read") {
   if (!dirHandle) return false;
-  const opts = { mode: "read" };
+  const opts = { mode };
   if ((await dirHandle.queryPermission(opts)) === "granted") return true;
   const perm = await dirHandle.requestPermission(opts);
   return perm === "granted";
@@ -1714,6 +1774,7 @@ function showSection(section) {
   else if (section === "arrets") refreshArretsView();
   else if (section === "organisation") refreshOrganisationView();
   else if (section === "personnel") refreshPersonnelView();
+  else if (section === "historique") scanHistoryFolderForFiles(true);
   else if (section === "manager") {
     populateManagerLineFilter();
     populateManagerParetoLineFilter();
@@ -2428,6 +2489,11 @@ function initHistoriqueEquipes() {
   refreshHistorySelect();
   bindHistoryExportButtons();
 
+  const scanBtn = document.getElementById("historyScanBtn");
+  scanBtn?.addEventListener("click", () => scanHistoryFolderForFiles());
+  setHistoryFolderStatus("Sélectionne le dossier honor200 ➜ Documents pour voir les fichiers.", "warning");
+  scanHistoryFolderForFiles(true);
+
   select.addEventListener("change", () => {
     if (select.value === "") {
       clearHistoryView();
@@ -2487,6 +2553,58 @@ function clearHistoryView() {
   }
 }
 
+async function scanHistoryFolderForFiles(silent = false) {
+  const handle = await getPreferredDirectoryHandle({ prompt: !silent, silent });
+  if (!handle) {
+    if (!silent) setHistoryFolderStatus("Choisis le dossier honor200 ➜ Documents pour l'historique.", "warning");
+    return;
+  }
+
+  setHistoryFolderStatus(`Scan en cours dans ${handle.name}...`);
+
+  const scanned = [];
+  try {
+    for await (const entry of handle.values()) {
+      if (entry.kind !== "file" || !/\.xlsx?$/i.test(entry.name)) continue;
+      const file = await entry.getFile();
+      const meta = parseFileNameInfo(file.name);
+      let rowCount = null;
+      try {
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+        rowCount = rows.filter(r => Object.values(r).some(v => v !== null && v !== "")).length;
+      } catch (e) {
+        console.warn("Lecture rapide impossible pour", file.name, e);
+      }
+
+      scanned.push({
+        fileName: file.name,
+        importedAt: new Date(file.lastModified).toISOString(),
+        quantieme: meta.quantieme,
+        semaine: meta.semaine,
+        heureFichier: meta.heureFichier,
+        rowCount,
+      });
+    }
+
+    historyScannedFiles = scanned;
+    const selected = getSelectedArchive();
+    if (selected && selected.state) {
+      renderHistoryFiles(selected.state.excelFiles || [], historyScannedFiles);
+    } else {
+      renderHistoryFiles([], historyScannedFiles);
+    }
+
+    const variant = scanned.length ? "success" : "warning";
+    setHistoryFolderStatus(`${scanned.length} fichier(s) Excel repéré(s) dans ${handle.name}.`, variant);
+  } catch (e) {
+    console.error("Scan historique échoué", e);
+    setHistoryFolderStatus("Impossible de lister les fichiers du dossier.", "error");
+  }
+}
+
 function getSelectedArchive() {
   const select = document.getElementById("historySelect");
   if (!select || !select.value) return null;
@@ -2494,7 +2612,7 @@ function getSelectedArchive() {
   return archives[idx] || null;
 }
 
-function exportSelectedArchive(kind) {
+async function exportSelectedArchive(kind) {
   const snap = getSelectedArchive();
   if (!snap || !snap.state) {
     alert("Sélectionne d'abord une archive.");
@@ -2506,9 +2624,9 @@ function exportSelectedArchive(kind) {
   const filenameBase = `${base}_${timePart || ""}`.replace(/\s+/g, "").replace(/[*/\\:?"<>|]/g, "-");
 
   if (kind === "data") {
-    exportDataToExcel(snap.state, `${filenameBase}_DATA.xlsx`);
+    await exportDataToExcel(snap.state, `${filenameBase}_DATA.xlsx`);
   } else {
-    exportPresentationToExcel(snap.state, `${filenameBase}_PRESENTATION.xlsx`);
+    await exportPresentationToExcel(snap.state, `${filenameBase}_PRESENTATION.xlsx`);
   }
 }
 
@@ -2520,25 +2638,33 @@ function bindHistoryExportButtons() {
   presBtn?.addEventListener("click", () => exportSelectedArchive("presentation"));
 }
 
-function renderHistoryFiles(files = []) {
+function renderHistoryFiles(files = [], fallback = []) {
   const card = document.getElementById("history-files-card");
   const table = document.getElementById("history-files-table");
+  const title = document.getElementById("historyFilesTitle");
   if (!card || !table) return;
 
   const tbody = table.querySelector("tbody");
   if (!tbody) return;
 
+  const dataset = files.length ? files : fallback;
+  if (title) {
+    if (files.length) title.textContent = "Fichiers liés à l'archive sélectionnée";
+    else if (fallback.length) title.textContent = "Fichiers scannés dans honor200 ➜ Documents";
+    else title.textContent = "Fichiers";
+  }
+
   card.style.display = "block";
   tbody.innerHTML = "";
 
-  if (!files.length) {
+  if (!dataset.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="4">Aucun fichier renseigné pour cette archive.</td>`;
+    tr.innerHTML = `<td colspan="4">Aucun fichier disponible dans ce contexte.</td>`;
     tbody.appendChild(tr);
     return;
   }
 
-  const rows = [...files].sort((a, b) => new Date(b.importedAt) - new Date(a.importedAt));
+  const rows = [...dataset].sort((a, b) => new Date(b.importedAt) - new Date(a.importedAt));
   rows.forEach(file => {
     const tr = document.createElement("tr");
     const qsh = [
@@ -2663,7 +2789,7 @@ function refreshHistoryView(snapshot) {
   }
 
   renderHistoryPareto(savedState.arrets || []);
-  renderHistoryFiles(savedState.excelFiles || []);
+  renderHistoryFiles(savedState.excelFiles || [], historyScannedFiles);
 
   // Graphique Chart.js
   const chartCanvas = document.getElementById("historyChart");
@@ -2750,7 +2876,20 @@ function refreshHistoryView(snapshot) {
  ********************************************/
 
 // ===== EXPORT 1 : DATA (Base de données) =====
-function exportDataToExcel(srcState, filename) {
+async function persistWorkbookToPreferredFolder(wb, filename) {
+  const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+
+  const handle = await getPreferredDirectoryHandle({ prompt: false, write: true, silent: true });
+  if (handle && await saveBlobToDirectory(handle, filename, blob)) return true;
+
+  const prompted = await getPreferredDirectoryHandle({ prompt: true, write: true });
+  if (prompted && await saveBlobToDirectory(prompted, filename, blob)) return true;
+
+  return false;
+}
+
+async function exportDataToExcel(srcState, filename) {
   if (typeof XLSX === 'undefined') {
     alert("Bibliothèque XLSX non chargée.");
     return;
@@ -2888,11 +3027,15 @@ function exportDataToExcel(srcState, filename) {
   ws['!cols'] = colWidths;
 
   XLSX.utils.book_append_sheet(wb, ws, "DATA");
-  XLSX.writeFile(wb, filename);
+
+  const saved = await persistWorkbookToPreferredFolder(wb, filename);
+  if (!saved) {
+    XLSX.writeFile(wb, filename);
+  }
 }
 
 // ===== EXPORT 2 : PRÉSENTATION (Réunion) - VERSION AMÉLIORÉE =====
-function exportPresentationToExcel(srcState, filename) {
+async function exportPresentationToExcel(srcState, filename) {
   if (typeof XLSX === 'undefined') {
     alert("Bibliothèque XLSX non chargée.");
     return;
@@ -3169,24 +3312,27 @@ function exportPresentationToExcel(srcState, filename) {
       { wch: 50 }
     ];
 
-    XLSX.utils.book_append_sheet(wb, wsPers, "👤 PERSONNEL");
+  XLSX.utils.book_append_sheet(wb, wsPers, "👤 PERSONNEL");
   }
 
-  XLSX.writeFile(wb, filename);
+  const saved = await persistWorkbookToPreferredFolder(wb, filename);
+  if (!saved) {
+    XLSX.writeFile(wb, filename);
+  }
 }
 
 function bindExportGlobal() {
   const presentationBtn = document.getElementById("exportPresentationBtn");
-  
+
   if (presentationBtn) {
-    presentationBtn.addEventListener("click", () => {
+    presentationBtn.addEventListener("click", async () => {
       const now = getNow();
       const hh = String(now.getHours()).padStart(2, "0");
       const mm = String(now.getMinutes()).padStart(2, "0");
       const ss = String(now.getSeconds()).padStart(2, "0");
 
       const filename = `Atelier_PRESENTATION_${hh}h${mm}_${ss}.xlsx`;
-      exportPresentationToExcel(state, filename);
+      await exportPresentationToExcel(state, filename);
     });
   }
 }
@@ -3199,7 +3345,7 @@ function bindRAZEquipe() {
   const btn = document.getElementById("razBtn");
   if (!btn) return;
 
-  btn.addEventListener("click", () => {
+  btn.addEventListener("click", async () => {
     if (!confirm("RAZ + changement d'équipe + export ?")) return;
 
     const now = getNow();
@@ -3238,12 +3384,8 @@ function bindRAZEquipe() {
     const filenameData = `Atelier_DATA_EQ${finished}_Q${quantieme}_S${week}_${hh}h${mm}.xlsx`;
     const filenamePres = `Atelier_PRESENTATION_EQ${finished}_Q${quantieme}_S${week}_${hh}h${mm}.xlsx`;
     
-    exportDataToExcel(snap.state, filenameData);
-    
-    // Petit délai pour éviter que les 2 téléchargements se chevauchent
-    setTimeout(() => {
-      exportPresentationToExcel(snap.state, filenamePres);
-    }, 500);
+    await exportDataToExcel(snap.state, filenameData);
+    await exportPresentationToExcel(snap.state, filenamePres);
 
     let next = "M";
     if (finished === "M") next = "AM";

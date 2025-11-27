@@ -415,6 +415,11 @@
         <select id="historySelect">
           <option value="">-- Sélectionner --</option>
         </select>
+
+        <div class="history-file-actions" style="margin-top: 8px;">
+          <button id="historyScanBtn" class="secondary-btn" type="button">🔍 Chercher dans honor200 ➜ Documents</button>
+          <div id="historyFolderStatus" class="import-status helper-text"></div>
+        </div>
       </div>
 
       <div class="card">
@@ -450,7 +455,7 @@
 
       <div class="card" id="history-files-card" style="display: none;">
         <div class="history-files-header">
-          <h3>Fichiers liés à l'archive sélectionnée</h3>
+          <h3 id="historyFilesTitle">Fichiers liés à l'archive sélectionnée</h3>
           <div class="history-file-actions">
             <button id="historyExportDataBtn" class="secondary-btn" type="button">📑 Export DATA</button>
             <button id="historyExportPresBtn" class="secondary-btn" type="button">📈 Export PRÉSENTATION</button>
