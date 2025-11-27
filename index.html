@@ -415,11 +415,6 @@
         <select id="historySelect">
           <option value="">-- Sélectionner --</option>
         </select>
-
-        <div class="history-file-actions" style="margin-top: 8px;">
-          <button id="historyScanBtn" class="secondary-btn" type="button">🔍 Chercher dans honor200 ➜ Documents</button>
-          <div id="historyFolderStatus" class="import-status helper-text"></div>
-        </div>
       </div>
 
       <div class="card">
@@ -442,32 +437,6 @@
               <th>Machine</th>
               <th>Durée (min)</th>
               <th>Commentaire</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-
-      <div class="card" id="history-pareto-card" style="display: none;">
-        <h3>Pareto des arrêts</h3>
-        <canvas id="historyPareto"></canvas>
-      </div>
-
-      <div class="card" id="history-files-card" style="display: none;">
-        <div class="history-files-header">
-          <h3 id="historyFilesTitle">Fichiers liés à l'archive sélectionnée</h3>
-          <div class="history-file-actions">
-            <button id="historyExportDataBtn" class="secondary-btn" type="button">📑 Export DATA</button>
-            <button id="historyExportPresBtn" class="secondary-btn" type="button">📈 Export PRÉSENTATION</button>
-          </div>
-        </div>
-        <table class="data-table" id="history-files-table">
-          <thead>
-            <tr>
-              <th>Fichier</th>
-              <th>Q/S/Heure</th>
-              <th>Lignes</th>
-              <th>Importé le</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -654,14 +623,15 @@
       <div class="card" id="managerParetoCard" style="display: none;">
         <div class="manager-results-header">
           <div>
-            <h3>Pareto des arrêts</h3>
-            <p class="helper-text">Camembert basé sur les arrêts (minutes) filtrés par période ou ligne.</p>
+            <h3 id="managerParetoTitle">Pareto des arrêts</h3>
+            <p class="helper-text" id="managerParetoSubtitle">Camembert basé sur les arrêts (minutes) filtrés par période ou ligne.</p>
           </div>
           <div class="manager-result-badges" id="managerParetoBadges"></div>
         </div>
         <div class="pareto-chart-wrapper">
           <canvas id="managerPareto"></canvas>
         </div>
+        <p class="helper-text pareto-click-info" id="managerParetoClickInfo"></p>
         <div class="pareto-actions">
           <button id="managerParetoBackToTop" class="secondary-btn" type="button">⬆️ Haut de page</button>
         </div>

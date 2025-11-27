@@ -1049,10 +1049,20 @@ function renderManagerPareto(options = {}) {
   const { scroll = false } = options;
   const card = document.getElementById("managerParetoCard");
   const canvas = document.getElementById("managerPareto");
+  const titleEl = document.getElementById("managerParetoTitle");
+  const subtitleEl = document.getElementById("managerParetoSubtitle");
+  const clickInfo = document.getElementById("managerParetoClickInfo");
   if (!card || !canvas || typeof Chart === "undefined") return;
+
+  const resetTexts = () => {
+    if (titleEl) titleEl.textContent = "Pareto des arrêts";
+    if (subtitleEl) subtitleEl.textContent = "Camembert basé sur les arrêts (minutes) filtrés par période ou ligne.";
+    if (clickInfo) clickInfo.textContent = "";
+  };
 
   const { dateStart, dateEnd, ligne } = managerParetoFilters;
   if (!dateStart && !dateEnd && !ligne) {
+    resetTexts();
     card.style.display = "none";
     renderManagerParetoBadges(0, 0);
     if (managerParetoChart) {
@@ -1080,6 +1090,7 @@ function renderManagerPareto(options = {}) {
   }
 
   if (!rows.length) {
+    resetTexts();
     card.style.display = "none";
     renderManagerParetoBadges(0, 0);
     if (managerParetoChart) {
@@ -1088,6 +1099,21 @@ function renderManagerPareto(options = {}) {
     }
     return;
   }
+
+  const formatDateLabel = value => {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleDateString("fr-FR");
+  };
+
+  const lineLabel = ligne ? `Ligne ${ligne}` : "Toutes lignes";
+  const periodLabel = dateStart || dateEnd
+    ? `${dateStart ? formatDateLabel(dateStart) : "Début"} → ${dateEnd ? formatDateLabel(dateEnd) : "Fin"}`
+    : "Période complète";
+
+  if (titleEl) titleEl.textContent = `Pareto des arrêts · ${lineLabel}`;
+  if (subtitleEl) subtitleEl.textContent = `Filtre : ${lineLabel} | ${periodLabel}`;
+  if (clickInfo) clickInfo.textContent = "Clique sur une part pour voir le détail complet.";
 
   const buckets = {};
   rows.forEach(r => {
@@ -1105,6 +1131,8 @@ function renderManagerPareto(options = {}) {
 
   if (managerParetoChart) managerParetoChart.destroy();
 
+  const titleText = [`${lineLabel}`, periodLabel];
+
   managerParetoChart = new Chart(canvas, {
     type: "pie",
     data: {
@@ -1121,6 +1149,7 @@ function renderManagerPareto(options = {}) {
       responsive: true,
       plugins: {
         legend: { position: "right" },
+        title: { display: true, text: titleText },
         tooltip: {
           callbacks: {
             label: ctx => `${ctx.label} : ${Math.round(ctx.parsed)} min`,
@@ -1131,6 +1160,27 @@ function renderManagerPareto(options = {}) {
   });
 
   const totalMinutes = data.reduce((s, v) => s + v, 0);
+  const showSliceDetail = (idx, evt) => {
+    if (!managerParetoChart) return;
+    const value = data[idx] || 0;
+    const pct = totalMinutes ? ((value / totalMinutes) * 100).toFixed(1) : 0;
+    if (managerParetoChart.tooltip?.setActiveElements) {
+      managerParetoChart.setActiveElements([{ datasetIndex: 0, index: idx }]);
+      managerParetoChart.tooltip.setActiveElements(
+        [{ datasetIndex: 0, index: idx }],
+        evt ? { x: evt.offsetX, y: evt.offsetY } : undefined
+      );
+      managerParetoChart.update();
+    }
+    if (clickInfo) clickInfo.textContent = `${labels[idx]} : ${Math.round(value)} min (${pct} %)`;
+  };
+
+  canvas.onclick = evt => {
+    const points = managerParetoChart.getElementsAtEventForMode(evt, "nearest", { intersect: true }, true);
+    if (!points.length) return;
+    showSliceDetail(points[0].index, evt);
+  };
+
   renderManagerParetoBadges(rows.length, totalMinutes);
   card.style.display = "block";
   if (scroll) {
@@ -2525,12 +2575,9 @@ function initHistoriqueEquipes() {
   if (!select) return;
 
   refreshHistorySelect();
-  bindHistoryExportButtons();
 
-  const scanBtn = document.getElementById("historyScanBtn");
-  scanBtn?.addEventListener("click", () => scanHistoryFolderForFiles());
-  setHistoryFolderStatus("Sélectionne le dossier honor200 ➜ Documents pour voir les fichiers.", "warning");
-  scanHistoryFolderForFiles(true);
+  // Scan automatique du dossier honor200/Documents pour pré-remplir la liste, sans bouton dédié.
+  scanHistoryFolderForFiles();
 
   select.addEventListener("change", async () => {
     clearHistoryView();

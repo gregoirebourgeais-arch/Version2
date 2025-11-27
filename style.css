@@ -1166,6 +1166,11 @@ body.light-mode .helper-text {
   justify-content: flex-end;
 }
 
+.pareto-click-info {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+}
+
 .hidden {
   display: none !important;
 }
