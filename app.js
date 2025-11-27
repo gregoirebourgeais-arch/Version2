@@ -1172,7 +1172,10 @@ function renderManagerPareto(options = {}) {
       );
       managerParetoChart.update();
     }
-    if (clickInfo) clickInfo.textContent = `${labels[idx]} : ${Math.round(value)} min (${pct} %)`;
+    if (clickInfo) {
+      clickInfo.innerHTML = `<strong>${labels[idx]}</strong><br>${Math.round(value)} min (${pct} %)` +
+        (pct ? ` (${pct} %)` : "");
+    }
   };
 
   canvas.onclick = evt => {
@@ -1836,7 +1839,7 @@ function showSection(section) {
   else if (section === "arrets") refreshArretsView();
   else if (section === "organisation") refreshOrganisationView();
   else if (section === "personnel") refreshPersonnelView();
-  else if (section === "historique") scanHistoryFolderForFiles(true);
+  else if (section === "historique") scanHistoryFolderForFiles();
   else if (section === "manager") {
     populateManagerLineFilter();
     populateManagerParetoLineFilter();
@@ -1983,6 +1986,12 @@ function loadDraft() {
   const L = state.currentLine;
   const d = state.formDraft[L] || {};
 
+  if (!d.start) {
+    const recs = getCurrentLineRecords();
+    const last = recs[recs.length - 1];
+    if (last?.end) d.start = last.end;
+  }
+
   const setVal = (id, val) => {
     const el = document.getElementById(id);
     if (el) el.value = val || "";
@@ -2101,8 +2110,10 @@ function bindProductionForm() {
 
       state.production[L].push(rec);
 
-      // effacer brouillon
-      state.formDraft[L] = {};
+      // pré-remplir la prochaine saisie avec l'heure de fin actuelle
+      state.formDraft[L] = {
+        start: rec.end || "",
+      };
       saveState();
 
       refreshProductionForm();
@@ -2856,6 +2867,11 @@ async function scanHistoryFolderForFiles(silent = false) {
 
     historyScannedFiles = scanned;
     refreshHistorySelect();
+    const select = document.getElementById("historySelect");
+    if (select && !select.value && historyScannedFiles.length) {
+      select.value = `file-0`;
+      select.dispatchEvent(new Event("change"));
+    }
     const selected = getSelectedArchive();
     if (selected && selected.state) {
       renderHistoryFiles(selected.state.excelFiles || [], historyScannedFiles);

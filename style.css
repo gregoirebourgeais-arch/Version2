@@ -304,6 +304,9 @@ h2 {
   padding: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   min-width: 230px;
+  max-width: 360px;
+  white-space: normal;
+  line-height: 1.5;
 }
 
 .line-tooltip.hidden {
@@ -1145,6 +1148,7 @@ body.light-mode .helper-text {
   font-size: 0.9rem;
   color: var(--text-muted);
   line-height: 1.5;
+  max-width: 520px;
 }
 
 .pareto-action {
@@ -1167,8 +1171,14 @@ body.light-mode .helper-text {
 }
 
 .pareto-click-info {
-  margin: 8px 0 0;
+  margin: 12px 0 0;
   color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  border: var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px;
+  line-height: 1.5;
+  word-break: break-word;
 }
 
 .hidden {
