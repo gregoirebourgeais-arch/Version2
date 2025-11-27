@@ -170,6 +170,8 @@ let managerFilteredRows = [];
 let managerParetoChart = null;
 let managerUnlockPromiseResolve = null;
 let historyScannedFiles = [];
+let historyCurrentSnapshot = null;
+let historySelectedSource = null;
 
 /******************************
  *   PARTIE 1 / 4 – FONCTIONS DATE
@@ -1043,7 +1045,8 @@ function renderManagerParetoBadges(count, totalMinutes) {
   });
 }
 
-function renderManagerPareto() {
+function renderManagerPareto(options = {}) {
+  const { scroll = false } = options;
   const card = document.getElementById("managerParetoCard");
   const canvas = document.getElementById("managerPareto");
   if (!card || !canvas || typeof Chart === "undefined") return;
@@ -1130,7 +1133,9 @@ function renderManagerPareto() {
   const totalMinutes = data.reduce((s, v) => s + v, 0);
   renderManagerParetoBadges(rows.length, totalMinutes);
   card.style.display = "block";
-  card.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (scroll) {
+    card.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 function refreshManagerResults() {
@@ -1191,8 +1196,7 @@ function refreshManagerResults() {
   const tbody = table.querySelector("tbody");
   tbody.innerHTML = "";
 
-  const max = 500;
-  rows.slice(0, max).forEach(row => {
+  rows.forEach(row => {
     const tr = document.createElement("tr");
     const typeLabel = row.type || "Production / Arrêt";
     const qsh = formatQSH(row);
@@ -1217,7 +1221,7 @@ function refreshManagerResults() {
 
   const infoEl = document.getElementById("managerResultsCount");
   if (infoEl) {
-    infoEl.textContent = `${rows.length} résultat(s) filtrés / ${managerDataset.length} dans le classeur (affichage limité à ${max}).`;
+    infoEl.textContent = `${rows.length} résultat(s) filtrés / ${managerDataset.length} dans le classeur.`;
   }
 }
 
@@ -1547,7 +1551,15 @@ function bindManagerArea() {
   }
 
   const paretoBtn = document.getElementById("managerParetoBtn");
-  paretoBtn?.addEventListener("click", () => renderManagerPareto());
+  paretoBtn?.addEventListener("click", () => renderManagerPareto({ scroll: true }));
+
+  const paretoBackBtn = document.getElementById("managerParetoBackToTop");
+  if (paretoBackBtn) {
+    paretoBackBtn.addEventListener("click", () => {
+      const target = document.getElementById("managerSearchCard") || document.getElementById("managerContent");
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
 
   const infoToggle = document.getElementById("managerInfoToggle");
   const infoContent = document.getElementById("managerInfoContent");
@@ -2422,6 +2434,7 @@ function refreshAtelierView() {
   LINES.forEach(line => {
     const recs = state.production[line] || [];
     const total = recs.reduce((s, r) => s + (r.quantity || 0), 0);
+    const downtime = recs.reduce((s, r) => s + (r.arret || 0), 0);
     const cad = recs
       .map(r => r.cadence)
       .filter(c => c && c > 0);
@@ -2442,7 +2455,32 @@ function refreshAtelierView() {
       <div class="summary-sub">Cadence moy. ${avg ? avg.toFixed(1) : "-"} h</div>
     `;
 
+    const tooltip = document.createElement("div");
+    tooltip.className = "line-tooltip hidden";
+    tooltip.innerHTML = `
+      <h4>Ligne ${line}</h4>
+      <p>Quantité cumulée : <strong>${total}</strong> colis</p>
+      <p>Temps d'arrêts : <strong>${downtime}</strong> min</p>
+      <div class="tooltip-actions">
+        <button class="primary-btn access-line-btn" data-line="${line}">Accès ligne</button>
+      </div>
+    `;
+
+    div.appendChild(tooltip);
     container.appendChild(div);
+
+    div.addEventListener("click", e => {
+      if (e.target.closest(".access-line-btn")) return;
+      document.querySelectorAll(".line-tooltip").forEach(t => t.classList.add("hidden"));
+      tooltip.classList.toggle("hidden");
+    });
+
+    tooltip.querySelector(".access-line-btn")?.addEventListener("click", e => {
+      e.stopPropagation();
+      document.querySelectorAll(".line-tooltip").forEach(t => t.classList.add("hidden"));
+      showSection("production");
+      selectLine(line, true);
+    });
   });
 
   // Arrêts majeurs
@@ -2494,12 +2532,24 @@ function initHistoriqueEquipes() {
   setHistoryFolderStatus("Sélectionne le dossier honor200 ➜ Documents pour voir les fichiers.", "warning");
   scanHistoryFolderForFiles(true);
 
-  select.addEventListener("change", () => {
-    if (select.value === "") {
-      clearHistoryView();
-    } else {
-      const idx = Number(select.value);
-      if (archives[idx]) {
+  select.addEventListener("change", async () => {
+    clearHistoryView();
+    const value = select.value;
+    if (!value) return;
+
+    if (value.startsWith("file-")) {
+      const idx = Number(value.split("-")[1]);
+      if (Number.isFinite(idx) && historyScannedFiles[idx]) {
+        await loadHistoryFromScannedFile(historyScannedFiles[idx]);
+      }
+      return;
+    }
+
+    if (value.startsWith("archive-")) {
+      const idx = Number(value.split("-")[1]);
+      if (Number.isFinite(idx) && archives[idx]) {
+        historyCurrentSnapshot = archives[idx].state;
+        historySelectedSource = { type: "archive", idx };
         refreshHistoryView(archives[idx]);
       }
     }
@@ -2512,9 +2562,21 @@ function refreshHistorySelect() {
 
   select.innerHTML = `<option value="">-- Sélectionner --</option>`;
 
+  historyScannedFiles.forEach((file, idx) => {
+    const opt = document.createElement("option");
+    opt.value = `file-${idx}`;
+    const qsh = [
+      file.quantieme ? `Q${String(file.quantieme).padStart(3, "0")}` : "?",
+      file.semaine ? `S${String(file.semaine).padStart(2, "0")}` : "?",
+      file.heureFichier || "-",
+    ].join(" / ");
+    opt.textContent = `${file.fileName} (${qsh})`;
+    select.appendChild(opt);
+  });
+
   archives.forEach((snap, idx) => {
     const opt = document.createElement("option");
-    opt.value = idx;
+    opt.value = `archive-${idx}`;
     opt.textContent = snap.label;
     select.appendChild(opt);
   });
@@ -2551,6 +2613,161 @@ function clearHistoryView() {
     historyChart.destroy();
     historyChart = null;
   }
+
+  historyCurrentSnapshot = null;
+  historySelectedSource = null;
+}
+
+function buildEmptyHistoryState(meta = {}) {
+  const base = {
+    currentEquipe: meta.equipe || "",
+    production: {},
+    arrets: [],
+    organisation: [],
+    personnel: [],
+    excelFiles: [],
+  };
+
+  LINES.forEach(line => {
+    base.production[line] = [];
+  });
+
+  if (meta.fileName) {
+    base.excelFiles.push({
+      fileName: meta.fileName,
+      importedAt: meta.importedAt || new Date().toISOString(),
+      quantieme: meta.quantieme,
+      semaine: meta.semaine,
+      heureFichier: meta.heureFichier,
+      rowCount: meta.rowCount || null,
+    });
+  }
+
+  return base;
+}
+
+async function parseHistoryWorkbook(file, meta = {}) {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array" });
+  const sheet = workbook.Sheets["DATA"] || workbook.Sheets[workbook.SheetNames[0]];
+  if (!sheet) return buildEmptyHistoryState(meta);
+
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+  if (!rows.length) return buildEmptyHistoryState(meta);
+
+  const headers = rows[0].map(h => String(h || "").trim().toLowerCase());
+  const idx = key => headers.findIndex(h => h === key.toLowerCase());
+
+  const typeIdx = idx("type");
+  const dateIdx = idx("date/heure");
+  const equipeIdx = idx("équipe");
+  const ligneIdx = idx("ligne");
+  const sousLigneIdx = idx("sous-ligne");
+  const machineIdx = idx("machine");
+  const hDebutIdx = idx("heure début");
+  const hFinIdx = idx("heure fin");
+  const qtyIdx = idx("quantité");
+  const arretIdx = idx("arrêt (min)");
+  const cadenceIdx = idx("cadence");
+  const tempsIdx = idx("temps restant");
+  const commentIdx = idx("commentaire");
+  const articleIdx = idx("article");
+  const nomIdx = idx("nom personnel");
+  const motifIdx = idx("motif personnel");
+  const visaIdx = idx("visa");
+  const valideIdx = idx("validée");
+
+  const snapshot = buildEmptyHistoryState(meta);
+
+  const getStr = (row, i) => {
+    if (i === -1) return "";
+    return String(row[i] ?? "").trim();
+  };
+  const getNum = (row, i) => {
+    if (i === -1) return 0;
+    const val = Number(row[i]);
+    return Number.isFinite(val) ? val : 0;
+  };
+
+  rows.slice(1).forEach(row => {
+    const isEmpty = row.every(v => v === null || v === undefined || v === "");
+    if (isEmpty) return;
+
+    const type = getStr(row, typeIdx).toUpperCase();
+    const ligne = getStr(row, ligneIdx) || "";
+    const baseRec = {
+      dateTime: getStr(row, dateIdx),
+      equipe: getStr(row, equipeIdx),
+    };
+
+    if (!snapshot.currentEquipe && baseRec.equipe) {
+      snapshot.currentEquipe = baseRec.equipe;
+    }
+
+    if (type.includes("PRODUCTION")) {
+      snapshot.production[ligne] = snapshot.production[ligne] || [];
+      snapshot.production[ligne].push({
+        ...baseRec,
+        start: getStr(row, hDebutIdx),
+        end: getStr(row, hFinIdx),
+        quantity: getNum(row, qtyIdx),
+        arret: getNum(row, arretIdx),
+        cadence: getNum(row, cadenceIdx) || null,
+        remainingTime: getStr(row, tempsIdx),
+        comment: getStr(row, commentIdx),
+        article: getStr(row, articleIdx),
+      });
+      return;
+    }
+
+    if (type.includes("ARRET")) {
+      snapshot.arrets.push({
+        ...baseRec,
+        line: ligne,
+        sousLigne: getStr(row, sousLigneIdx),
+        machine: getStr(row, machineIdx),
+        duration: getNum(row, arretIdx),
+        comment: getStr(row, commentIdx),
+        article: getStr(row, articleIdx),
+      });
+      return;
+    }
+
+    if (type.includes("ORGANISATION")) {
+      snapshot.organisation.push({
+        ...baseRec,
+        consigne: getStr(row, commentIdx),
+        visa: getStr(row, visaIdx),
+        valide: getStr(row, valideIdx).toLowerCase().startsWith("o"),
+      });
+      return;
+    }
+
+    if (type.includes("PERSONNEL")) {
+      snapshot.personnel.push({
+        ...baseRec,
+        nom: getStr(row, nomIdx),
+        motif: getStr(row, motifIdx),
+        comment: getStr(row, commentIdx),
+      });
+    }
+  });
+
+  return snapshot;
+}
+
+async function loadHistoryFromScannedFile(scanned) {
+  if (!scanned?.handle?.getFile) return;
+  try {
+    const file = await scanned.handle.getFile();
+    const snapshot = await parseHistoryWorkbook(file, scanned);
+    historyCurrentSnapshot = snapshot;
+    historySelectedSource = { type: "file", meta: scanned };
+    refreshHistoryView(snapshot);
+  } catch (e) {
+    console.error("Lecture archive Excel échouée", e);
+    setHistoryFolderStatus("Impossible de lire ce fichier Excel.", "error");
+  }
 }
 
 async function scanHistoryFolderForFiles(silent = false) {
@@ -2586,10 +2803,12 @@ async function scanHistoryFolderForFiles(silent = false) {
         semaine: meta.semaine,
         heureFichier: meta.heureFichier,
         rowCount,
+        handle: entry,
       });
     }
 
     historyScannedFiles = scanned;
+    refreshHistorySelect();
     const selected = getSelectedArchive();
     if (selected && selected.state) {
       renderHistoryFiles(selected.state.excelFiles || [], historyScannedFiles);
@@ -2606,10 +2825,25 @@ async function scanHistoryFolderForFiles(silent = false) {
 }
 
 function getSelectedArchive() {
+  if (historySelectedSource?.type === "file" && historyCurrentSnapshot) {
+    const meta = historySelectedSource.meta || {};
+    return {
+      state: historyCurrentSnapshot,
+      label: meta.fileName || "Fichier Excel",
+      equipe: historyCurrentSnapshot.currentEquipe,
+      quantieme: meta.quantieme,
+      week: meta.semaine,
+      savedAt: meta.heureFichier || meta.importedAt,
+    };
+  }
+
   const select = document.getElementById("historySelect");
   if (!select || !select.value) return null;
-  const idx = Number(select.value);
-  return archives[idx] || null;
+  if (select.value.startsWith("archive-")) {
+    const idx = Number(select.value.split("-")[1]);
+    return archives[idx] || null;
+  }
+  return null;
 }
 
 async function exportSelectedArchive(kind) {

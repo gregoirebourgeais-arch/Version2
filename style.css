@@ -267,6 +267,7 @@ h2 {
 }
 
 .summary-card {
+  position: relative;
   background: radial-gradient(circle at top left, #172238, #0a111d);
   border-radius: 12px;
   border: var(--border-subtle);
@@ -274,6 +275,7 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  cursor: pointer;
 }
 
 .summary-card-title {
@@ -290,6 +292,39 @@ h2 {
 .summary-sub {
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+
+.line-tooltip {
+  position: absolute;
+  inset: auto auto 8px 8px;
+  z-index: 4;
+  background: rgba(12, 19, 34, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  min-width: 230px;
+}
+
+.line-tooltip.hidden {
+  display: none;
+}
+
+.line-tooltip h4 {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+}
+
+.line-tooltip p {
+  margin: 0 0 4px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.line-tooltip .tooltip-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
 }
 
 /* SUMMARY GRID (Historique) */
@@ -1123,6 +1158,12 @@ body.light-mode .helper-text {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.pareto-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .hidden {
