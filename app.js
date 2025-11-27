@@ -1839,7 +1839,7 @@ function showSection(section) {
   else if (section === "arrets") refreshArretsView();
   else if (section === "organisation") refreshOrganisationView();
   else if (section === "personnel") refreshPersonnelView();
-  else if (section === "historique") scanHistoryFolderForFiles();
+  else if (section === "historique") scanHistoryFolderForFiles(true);
   else if (section === "manager") {
     populateManagerLineFilter();
     populateManagerParetoLineFilter();
@@ -2353,6 +2353,9 @@ function refreshOrganisationView() {
           ${rec.valide ? "✅" : "❌"}
         </button>
       </td>
+      <td>
+        <button class="secondary-btn danger" data-delete="${idx}">✕</button>
+      </td>
     `;
 
     tbody.appendChild(tr);
@@ -2362,6 +2365,16 @@ function refreshOrganisationView() {
     btn.addEventListener("click", () => {
       const i = Number(btn.dataset.idx);
       state.organisation[i].valide = !state.organisation[i].valide;
+      saveState();
+      refreshOrganisationView();
+    });
+  });
+
+  tbody.querySelectorAll("button[data-delete]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const i = Number(btn.dataset.delete);
+      if (!Number.isInteger(i)) return;
+      state.organisation.splice(i, 1);
       saveState();
       refreshOrganisationView();
     });
@@ -2583,12 +2596,24 @@ function refreshAtelierView() {
 
 function initHistoriqueEquipes() {
   const select = document.getElementById("historySelect");
+  const fileBtn = document.getElementById("historyFileBtn");
+  const fileInput = document.getElementById("historyFileInput");
   if (!select) return;
 
   refreshHistorySelect();
 
-  // Scan automatique du dossier honor200/Documents pour pré-remplir la liste, sans bouton dédié.
-  scanHistoryFolderForFiles();
+  // Scan automatique silencieux du dossier honor200/Documents si déjà autorisé.
+  scanHistoryFolderForFiles(true);
+
+  if (fileBtn && fileInput) {
+    fileBtn.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      await ingestHistoryFile(file);
+      fileInput.value = "";
+    });
+  }
 
   select.addEventListener("change", async () => {
     clearHistoryView();
@@ -2814,10 +2839,62 @@ async function parseHistoryWorkbook(file, meta = {}) {
   return snapshot;
 }
 
-async function loadHistoryFromScannedFile(scanned) {
-  if (!scanned?.handle?.getFile) return;
+async function ingestHistoryFile(file) {
+  if (!file) return;
+
+  const meta = parseFileNameInfo(file.name);
+  let rowCount = null;
   try {
-    const file = await scanned.handle.getFile();
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    if (sheet) {
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+      rowCount = rows.filter(r => Object.values(r).some(v => v !== null && v !== "")).length;
+    }
+  } catch (e) {
+    console.warn("Lecture rapide impossible pour", file.name, e);
+  }
+
+  const scanned = {
+    fileName: file.name,
+    importedAt: new Date(file.lastModified).toISOString(),
+    quantieme: meta.quantieme,
+    semaine: meta.semaine,
+    heureFichier: meta.heureFichier,
+    rowCount,
+    file,
+  };
+
+  historyScannedFiles = [scanned, ...historyScannedFiles];
+  refreshHistorySelect();
+
+  const select = document.getElementById("historySelect");
+  if (select) {
+    select.value = "file-0";
+    select.dispatchEvent(new Event("change"));
+  }
+
+  setHistoryFolderStatus(`${file.name} prêt pour consultation.`, "success");
+}
+
+async function loadHistoryFromScannedFile(scanned) {
+  let file = null;
+  try {
+    if (scanned?.file) {
+      file = scanned.file;
+    } else if (scanned?.handle?.getFile) {
+      file = await scanned.handle.getFile();
+    }
+  } catch (e) {
+    console.error("Récupération du fichier historique échouée", e);
+  }
+
+  if (!file) {
+    setHistoryFolderStatus("Impossible de lire ce fichier Excel.", "error");
+    return;
+  }
+  try {
     const snapshot = await parseHistoryWorkbook(file, scanned);
     historyCurrentSnapshot = snapshot;
     historySelectedSource = { type: "file", meta: scanned };
