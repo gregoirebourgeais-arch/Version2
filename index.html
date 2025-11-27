@@ -510,18 +510,17 @@
         recherche parcourt l'intégralité de l'historique stocké dans ce classeur, sans dépendance réseau.
       </p>
 
-      <div class="card" id="managerLockInfo" style="display: none;">
-        <p class="helper-text">Accès manager verrouillé. Ouvre Paramètres pour déverrouiller.</p>
-      </div>
-
       <div class="manager-grid" id="managerContent">
         <div class="card">
           <h3>Import vers la base manager</h3>
-          <p class="helper-text">
-            Les fichiers peuvent arriver à tout moment (jusqu'à plusieurs par équipe). Clique sur « Mise à jour » pour
-            scanner un dossier (ex : honor200 ➜ Documents) et ne récupérer que les fichiers Excel non encore importés.
-            Une vérification automatique relance ce scan toutes les 30 minutes si le dossier est autorisé.
-          </p>
+          <div class="info-bubble">
+            <button type="button" class="icon-btn info-toggle" id="managerInfoToggle" title="Détails de la mise à jour">ℹ️ Détails</button>
+            <div class="info-bubble__content hidden" id="managerInfoContent">
+              Les fichiers peuvent arriver à tout moment (jusqu'à plusieurs par équipe). Clique sur « Mise à jour » pour
+              scanner un dossier (ex : honor200 ➜ Documents) et ne récupérer que les fichiers Excel non encore importés.
+              Une vérification automatique relance ce scan toutes les 30 minutes si le dossier est autorisé.
+            </div>
+          </div>
           <div class="import-actions">
             <input type="file" id="managerExcelInput" accept=".xlsx,.xls" multiple />
             <button id="managerScanBtn" class="primary-btn">📂 Mise à jour (scanne un dossier)</button>
@@ -583,6 +582,24 @@
                 <option value="asc">Croissant</option>
               </select>
             </div>
+            <div class="form-group">
+              <label for="managerDateStart">Début période (Pareto)</label>
+              <input type="date" id="managerDateStart" />
+            </div>
+            <div class="form-group">
+              <label for="managerDateEnd">Fin période (Pareto)</label>
+              <input type="date" id="managerDateEnd" />
+            </div>
+            <div class="form-group">
+              <label for="managerParetoLine">Ligne (Pareto)</label>
+              <select id="managerParetoLine">
+                <option value="">Toutes</option>
+              </select>
+            </div>
+            <div class="form-group pareto-action">
+              <label>&nbsp;</label>
+              <button id="managerParetoBtn" class="secondary-btn" type="button">📊 Afficher le Pareto des arrêts</button>
+            </div>
           </div>
 
           <div class="manager-active-filters" id="managerActiveFilters"></div>
@@ -628,6 +645,19 @@
           </div>
         </div>
       </div>
+
+      <div class="card" id="managerParetoCard" style="display: none;">
+        <div class="manager-results-header">
+          <div>
+            <h3>Pareto des arrêts</h3>
+            <p class="helper-text">Camembert basé sur les arrêts (minutes) filtrés par période ou ligne.</p>
+          </div>
+          <div class="manager-result-badges" id="managerParetoBadges"></div>
+        </div>
+        <div class="pareto-chart-wrapper">
+          <canvas id="managerPareto"></canvas>
+        </div>
+      </div>
     </section>
 
     <!-- PANNEAU PARAMÈTRES -->
@@ -641,21 +671,21 @@
       <div class="settings-grid">
         <div class="card compact">
           <h4>Accès Manager</h4>
-          <form id="settingsUnlockForm" class="manager-security-form">
-            <label for="settingsUnlockInput">Déverrouiller</label>
-            <div class="manager-security-actions">
-              <input type="password" id="settingsUnlockInput" placeholder="Mot de passe" />
-              <button type="submit" class="primary-btn">🔓</button>
-            </div>
+          <form id="settingsCreatePasswordForm" class="manager-security-form">
+            <label for="settingsCreatePassword">Créer le mot de passe</label>
+            <input type="password" id="settingsCreatePassword" placeholder="Mot de passe" />
+            <input type="password" id="settingsCreatePasswordConfirm" placeholder="Confirmation" />
+            <button type="submit" class="secondary-btn">💾 Enregistrer</button>
           </form>
 
-          <form id="settingsPasswordForm" class="manager-security-form">
-            <label for="settingsPasswordInput">Définir / modifier</label>
-            <div class="manager-security-actions">
-              <input type="password" id="settingsPasswordInput" placeholder="Nouveau mot de passe" />
-              <button type="submit" class="secondary-btn">💾</button>
-            </div>
+          <form id="settingsChangePasswordForm" class="manager-security-form">
+            <label for="settingsOldPassword">Modifier le mot de passe</label>
+            <input type="password" id="settingsOldPassword" placeholder="Ancien mot de passe" />
+            <input type="password" id="settingsNewPassword" placeholder="Nouveau mot de passe" />
+            <input type="password" id="settingsNewPasswordConfirm" placeholder="Confirmer le nouveau" />
+            <button type="submit" class="secondary-btn">🔐 Mettre à jour</button>
           </form>
+
           <div id="settingsSecurityStatus" class="import-status helper-text"></div>
         </div>
 
@@ -673,6 +703,24 @@
             </label>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div id="managerUnlockModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="managerUnlockTitle">
+      <div class="modal__content">
+        <div class="modal__header">
+          <h3 id="managerUnlockTitle">Accès Manager</h3>
+          <button id="managerUnlockClose" class="icon-btn" aria-label="Fermer">✕</button>
+        </div>
+        <p class="helper-text">Saisis le mot de passe pour afficher la page Manager (par défaut : 3005 tant qu'il n'est pas changé).</p>
+        <form id="managerUnlockForm" class="manager-security-form">
+          <input type="password" id="managerUnlockInput" placeholder="Mot de passe" autocomplete="current-password" />
+          <div class="modal__actions">
+            <button type="submit" class="primary-btn">Valider</button>
+            <button type="button" id="managerUnlockCancel" class="secondary-btn">Annuler</button>
+          </div>
+        </form>
+        <div id="managerUnlockStatus" class="import-status helper-text"></div>
       </div>
     </div>
 

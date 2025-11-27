@@ -1095,6 +1095,36 @@ body.light-mode .helper-text {
   margin-bottom: 16px;
 }
 
+.info-bubble {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.info-bubble__content {
+  background: rgba(255, 255, 255, 0.04);
+  border: var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.pareto-action {
+  display: flex;
+  align-items: flex-end;
+}
+
+.pareto-chart-wrapper {
+  width: 100%;
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .hidden {
   display: none !important;
 }
@@ -1272,6 +1302,44 @@ body.light-mode .helper-text {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  backdrop-filter: blur(2px);
+}
+
+.modal.hidden {
+  display: none !important;
+}
+
+.modal__content {
+  background: var(--card-bg);
+  border: var(--border-subtle);
+  border-radius: 14px;
+  padding: 18px;
+  width: min(420px, 92vw);
+  box-shadow: var(--shadow-soft);
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .settings-grid {

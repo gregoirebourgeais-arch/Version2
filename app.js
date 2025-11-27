@@ -93,6 +93,7 @@ const MANAGER_DIR_DB = "manager_dir_handle_db";
 const MANAGER_DIR_STORE = "handles";
 const MANAGER_DIR_KEY = "manager_import_dir";
 const MANAGER_AUTO_SCAN_MS = 30 * 60 * 1000;
+const DEFAULT_MANAGER_PASSWORD = "3005";
 
 const MANAGER_FIELDS = [
   { key: "type", label: "Type" },
@@ -154,11 +155,20 @@ const managerSearchState = {
   sortDir: "desc",
 };
 
+const managerParetoFilters = {
+  dateStart: "",
+  dateEnd: "",
+  ligne: "",
+};
+
 let managerDataset = [];
 let managerImportLog = [];
 let managerUnlocked = false;
 let managerDirHandle = null;
 let managerAutoScanTimer = null;
+let managerFilteredRows = [];
+let managerParetoChart = null;
+let managerUnlockPromiseResolve = null;
 
 /******************************
  *   PARTIE 1 / 4 – FONCTIONS DATE
@@ -197,6 +207,21 @@ function formatTimeRemaining(min) {
   if (h === 0) return `${m} min`;
   if (m === 0) return `${h} h`;
   return `${h} h ${m} min`;
+}
+
+function parseRecordDate(row) {
+  const value = row?.dateHeure || "";
+  const match = value.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (!match) return null;
+  const [, dd, mm, yyyy] = match;
+  const year = Number(yyyy.length === 2 ? `20${yyyy}` : yyyy);
+  const month = Number(mm) - 1;
+  const day = Number(dd);
+  const timeMatch = value.match(/(\d{1,2})h(\d{2})/i);
+  const hours = timeMatch ? Number(timeMatch[1]) : 0;
+  const minutes = timeMatch ? Number(timeMatch[2]) : 0;
+  const d = new Date(year, month, day, hours, minutes);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 function parseTimeToMinutes(t) {
@@ -466,7 +491,7 @@ function setManagerFolderStatus(message, variant = "") {
 }
 
 function setManagerSecurityStatus(message, variant = "") {
-  ["managerSecurityStatus", "settingsSecurityStatus"].forEach(id => {
+  ["settingsSecurityStatus", "managerUnlockStatus"].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     el.textContent = message;
@@ -593,39 +618,111 @@ function getStoredPasswordHash() {
 
 async function verifyManagerPassword(pwd) {
   const stored = getStoredPasswordHash();
-  if (!stored) return true; // aucun mot de passe configuré
+  if (!stored) return false;
   const hashed = await hashPassword(pwd);
   return hashed === stored;
 }
 
-async function setManagerPassword(pwd) {
+async function ensureDefaultManagerPassword() {
+  if (getStoredPasswordHash()) return;
+  const hashed = await hashPassword(DEFAULT_MANAGER_PASSWORD);
+  localStorage.setItem(MANAGER_PASSWORD_KEY, hashed);
+}
+
+async function storeManagerPassword(pwd) {
+  const hashed = await hashPassword(pwd);
+  localStorage.setItem(MANAGER_PASSWORD_KEY, hashed);
+}
+
+function isManagerLocked() {
+  return Boolean(getStoredPasswordHash()) && !managerUnlocked;
+}
+
+async function createManagerPassword(pwd, confirm) {
+  if (getStoredPasswordHash()) {
+    setManagerSecurityStatus("Un mot de passe existe déjà. Utilise le formulaire de modification.", "warning");
+    return false;
+  }
   if (!pwd || pwd.length < 4) {
     setManagerSecurityStatus("Choisis un mot de passe d'au moins 4 caractères.", "warning");
     return false;
   }
-  const hashed = await hashPassword(pwd);
-  localStorage.setItem(MANAGER_PASSWORD_KEY, hashed);
-  setManagerSecurityStatus("Mot de passe enregistré localement.", "success");
+  if (pwd !== confirm) {
+    setManagerSecurityStatus("Les deux mots de passe ne correspondent pas.", "error");
+    return false;
+  }
+  await storeManagerPassword(pwd);
+  managerUnlocked = true;
+  setManagerSecurityStatus("Mot de passe créé et accès déverrouillé.", "success");
+  updateManagerLockUI();
   return true;
+}
+
+async function changeManagerPassword(oldPwd, newPwd, confirm) {
+  if (!newPwd || newPwd.length < 4) {
+    setManagerSecurityStatus("Choisis un nouveau mot de passe d'au moins 4 caractères.", "warning");
+    return false;
+  }
+  if (newPwd !== confirm) {
+    setManagerSecurityStatus("La confirmation du nouveau mot de passe ne correspond pas.", "error");
+    return false;
+  }
+  const ok = await verifyManagerPassword(oldPwd);
+  if (!ok) {
+    setManagerSecurityStatus("Ancien mot de passe incorrect.", "error");
+    return false;
+  }
+  await storeManagerPassword(newPwd);
+  managerUnlocked = true;
+  setManagerSecurityStatus("Mot de passe mis à jour et accès déverrouillé.", "success");
+  updateManagerLockUI();
+  return true;
+}
+
+function closeManagerUnlockModal(success = false) {
+  const modal = document.getElementById("managerUnlockModal");
+  const input = document.getElementById("managerUnlockInput");
+  if (modal) modal.classList.add("hidden");
+  if (input) input.value = "";
+  if (managerUnlockPromiseResolve) {
+    managerUnlockPromiseResolve(success);
+    managerUnlockPromiseResolve = null;
+  }
+}
+
+function openManagerUnlockModal() {
+  const modal = document.getElementById("managerUnlockModal");
+  const input = document.getElementById("managerUnlockInput");
+  if (!modal || !input) return;
+  modal.classList.remove("hidden");
+  setManagerSecurityStatus("", "");
+  setTimeout(() => input.focus(), 20);
+}
+
+async function promptManagerUnlock() {
+  await ensureDefaultManagerPassword();
+  openManagerUnlockModal();
+  return new Promise(resolve => {
+    managerUnlockPromiseResolve = resolve;
+  });
 }
 
 function updateManagerLockUI() {
   const content = document.getElementById("managerContent");
   const resultsCard = document.getElementById("managerResultsCard");
-  const lockInfo = document.getElementById("managerLockInfo");
+  const paretoCard = document.getElementById("managerParetoCard");
 
-  const hasPassword = Boolean(getStoredPasswordHash());
-  const locked = hasPassword && !managerUnlocked;
+  const locked = isManagerLocked();
 
   if (locked) {
     if (content) content.style.display = "none";
     if (resultsCard) resultsCard.style.display = "none";
-    if (lockInfo) lockInfo.style.display = "block";
-    setManagerStatus("Accès manager verrouillé. Ouvre Paramètres pour déverrouiller.", "warning");
+    if (paretoCard) paretoCard.style.display = "none";
+    setManagerStatus("Accès manager verrouillé. Clique sur Manager pour saisir le mot de passe.", "warning");
   } else {
-    if (lockInfo) lockInfo.style.display = "none";
     if (content) content.style.display = "grid";
     if (resultsCard) resultsCard.style.display = "block";
+    if (paretoCard && managerParetoChart) paretoCard.style.display = "block";
   }
 }
 
@@ -635,13 +732,15 @@ async function handleUnlock(password) {
     setManagerSecurityStatus("Mot de passe incorrect.", "error");
     managerUnlocked = false;
     updateManagerLockUI();
-    return;
+    return false;
   }
   managerUnlocked = true;
   setManagerSecurityStatus("Accès manager déverrouillé.", "success");
   updateManagerLockUI();
   refreshManagerImports();
   refreshManagerResults();
+  closeManagerUnlockModal(true);
+  return true;
 }
 
 function getManagerSignature(row) {
@@ -712,6 +811,35 @@ function renderManagerFieldSelector() {
 
 async function populateManagerLineFilter() {
   const select = document.getElementById("managerLineFilter");
+  if (!select) return;
+
+  const previous = select.value;
+  select.innerHTML = "";
+
+  const baseOption = document.createElement("option");
+  baseOption.value = "";
+  baseOption.textContent = "Toutes";
+  select.appendChild(baseOption);
+
+  const uniqueLines = new Set(LINES);
+  managerDataset.forEach(r => {
+    if (r.ligne) uniqueLines.add(r.ligne);
+  });
+
+  Array.from(uniqueLines)
+    .sort()
+    .forEach(line => {
+      const opt = document.createElement("option");
+      opt.value = line;
+      opt.textContent = line;
+      select.appendChild(opt);
+    });
+
+  select.value = previous;
+}
+
+async function populateManagerParetoLineFilter() {
+  const select = document.getElementById("managerParetoLine");
   if (!select) return;
 
   const previous = select.value;
@@ -838,6 +966,113 @@ function renderManagerStats(filtered) {
   });
 }
 
+function renderManagerParetoBadges(count, totalMinutes) {
+  const wrap = document.getElementById("managerParetoBadges");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+
+  const badges = [
+    { label: "Arrêts comptés", value: count },
+    { label: "Minutes", value: Math.round(totalMinutes) },
+  ];
+
+  badges.forEach(b => {
+    const div = document.createElement("div");
+    div.className = "result-badge";
+    div.textContent = `${b.label} : ${b.value}`;
+    wrap.appendChild(div);
+  });
+}
+
+function renderManagerPareto() {
+  const card = document.getElementById("managerParetoCard");
+  const canvas = document.getElementById("managerPareto");
+  if (!card || !canvas || typeof Chart === "undefined") return;
+
+  const { dateStart, dateEnd, ligne } = managerParetoFilters;
+  if (!dateStart && !dateEnd && !ligne) {
+    card.style.display = "none";
+    renderManagerParetoBadges(0, 0);
+    if (managerParetoChart) {
+      managerParetoChart.destroy();
+      managerParetoChart = null;
+    }
+    return;
+  }
+
+  let rows = (managerFilteredRows || []).filter(r => Number(r.arretMinutes) > 0);
+
+  if (ligne) rows = rows.filter(r => (r.ligne || "") === ligne);
+
+  const startDate = dateStart ? new Date(dateStart) : null;
+  const endDate = dateEnd ? new Date(`${dateEnd}T23:59:59`) : null;
+
+  if (startDate || endDate) {
+    rows = rows.filter(r => {
+      const d = parseRecordDate(r);
+      if (!d) return false;
+      if (startDate && d < startDate) return false;
+      if (endDate && d > endDate) return false;
+      return true;
+    });
+  }
+
+  if (!rows.length) {
+    card.style.display = "none";
+    renderManagerParetoBadges(0, 0);
+    if (managerParetoChart) {
+      managerParetoChart.destroy();
+      managerParetoChart = null;
+    }
+    return;
+  }
+
+  const buckets = {};
+  rows.forEach(r => {
+    const key = r.commentaire || r.motifPersonnel || r.machine || r.ligne || "Autre";
+    const val = Number(r.arretMinutes) || 0;
+    buckets[key] = (buckets[key] || 0) + val;
+  });
+
+  const entries = Object.entries(buckets)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12);
+
+  const labels = entries.map(([k]) => k);
+  const data = entries.map(([, v]) => v);
+
+  if (managerParetoChart) managerParetoChart.destroy();
+
+  managerParetoChart = new Chart(canvas, {
+    type: "pie",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Arrêts (min)",
+          data,
+          backgroundColor: labels.map((_, idx) => `hsl(${(idx * 45) % 360} 70% 55%)`),
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: "right" },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.label} : ${Math.round(ctx.parsed)} min`,
+          },
+        },
+      },
+    },
+  });
+
+  const totalMinutes = data.reduce((s, v) => s + v, 0);
+  renderManagerParetoBadges(rows.length, totalMinutes);
+  card.style.display = "block";
+}
+
 function refreshManagerResults() {
   const table = document.getElementById("managerResultsTable");
   if (!table) return;
@@ -888,6 +1123,10 @@ function refreshManagerResults() {
   renderFilterChips(filters);
   renderManagerBadges(rows.length, totalRows);
   renderManagerStats(rows.length);
+
+  managerFilteredRows = rows;
+
+  renderManagerPareto();
 
   const tbody = table.querySelector("tbody");
   tbody.innerHTML = "";
@@ -998,6 +1237,7 @@ async function importManagerFiles(files) {
   refreshManagerImports();
   refreshManagerResults();
   populateManagerLineFilter();
+  populateManagerParetoLineFilter();
 }
 
 async function ensureDirectoryPermission(dirHandle) {
@@ -1112,6 +1352,7 @@ function resetManagerStore() {
   refreshManagerImports();
   refreshManagerResults();
   populateManagerLineFilter();
+  populateManagerParetoLineFilter();
 }
 
 function downloadManagerWorkbook() {
@@ -1144,6 +1385,7 @@ function bindManagerArea() {
   renderManagerFieldSelector();
   populateManagerSortOptions();
   populateManagerLineFilter();
+  populateManagerParetoLineFilter();
   updateManagerLockUI();
   setManagerFolderStatus("Sélectionne honor200 ➜ Documents pour activer la mise à jour auto.");
 
@@ -1217,6 +1459,41 @@ function bindManagerArea() {
     sortDir.addEventListener("change", () => {
       managerSearchState.sortDir = sortDir.value;
       refreshManagerResults();
+    });
+  }
+
+  const dateStart = document.getElementById("managerDateStart");
+  if (dateStart) {
+    dateStart.addEventListener("change", () => {
+      managerParetoFilters.dateStart = dateStart.value;
+      renderManagerPareto();
+    });
+  }
+
+  const dateEnd = document.getElementById("managerDateEnd");
+  if (dateEnd) {
+    dateEnd.addEventListener("change", () => {
+      managerParetoFilters.dateEnd = dateEnd.value;
+      renderManagerPareto();
+    });
+  }
+
+  const paretoLine = document.getElementById("managerParetoLine");
+  if (paretoLine) {
+    paretoLine.addEventListener("change", () => {
+      managerParetoFilters.ligne = paretoLine.value;
+      renderManagerPareto();
+    });
+  }
+
+  const paretoBtn = document.getElementById("managerParetoBtn");
+  paretoBtn?.addEventListener("click", () => renderManagerPareto());
+
+  const infoToggle = document.getElementById("managerInfoToggle");
+  const infoContent = document.getElementById("managerInfoContent");
+  if (infoToggle && infoContent) {
+    infoToggle.addEventListener("click", () => {
+      infoContent.classList.toggle("hidden");
     });
   }
 
@@ -1417,6 +1694,10 @@ function initEquipeSelector() {
 // === NAVIGATION ===
 
 function showSection(section) {
+  if (section === "manager" && isManagerLocked()) {
+    promptManagerUnlock();
+    return;
+  }
   state.currentSection = section;
   saveState();
 
@@ -1435,6 +1716,7 @@ function showSection(section) {
   else if (section === "personnel") refreshPersonnelView();
   else if (section === "manager") {
     populateManagerLineFilter();
+    populateManagerParetoLineFilter();
     refreshManagerImports();
     refreshManagerResults();
   }
@@ -1442,8 +1724,13 @@ function showSection(section) {
 
 function initNav() {
   document.querySelectorAll(".nav-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      showSection(btn.dataset.section);
+    btn.addEventListener("click", async () => {
+      const target = btn.dataset.section;
+      if (target === "manager" && isManagerLocked()) {
+        const unlocked = await promptManagerUnlock();
+        if (!unlocked) return;
+      }
+      showSection(target);
     });
   });
 }
@@ -3174,6 +3461,27 @@ function initTheme() {
   });
 }
 
+function initManagerUnlockModal() {
+  const form = document.getElementById("managerUnlockForm");
+  const cancelBtn = document.getElementById("managerUnlockCancel");
+  const closeBtn = document.getElementById("managerUnlockClose");
+  const input = document.getElementById("managerUnlockInput");
+
+  form?.addEventListener("submit", async e => {
+    e.preventDefault();
+    const ok = await handleUnlock(input?.value || "");
+    if (!ok) {
+      setManagerSecurityStatus("Mot de passe incorrect.", "error");
+    }
+  });
+
+  [cancelBtn, closeBtn].forEach(btn =>
+    btn?.addEventListener("click", () => {
+      closeManagerUnlockModal(false);
+    })
+  );
+}
+
 function initSettingsPanel() {
   const panel = document.getElementById("settingsPanel");
   const toggle = document.getElementById("settingsToggle");
@@ -3202,23 +3510,25 @@ function initSettingsPanel() {
   };
   headerToggle?.addEventListener("change", applyHeaderSize);
   applyHeaderSize();
-
-  const unlockForm = document.getElementById("settingsUnlockForm");
-  const unlockInput = document.getElementById("settingsUnlockInput");
-  unlockForm?.addEventListener("submit", async e => {
+  const createForm = document.getElementById("settingsCreatePasswordForm");
+  const createInput = document.getElementById("settingsCreatePassword");
+  const createConfirm = document.getElementById("settingsCreatePasswordConfirm");
+  createForm?.addEventListener("submit", async e => {
     e.preventDefault();
-    await handleUnlock(unlockInput?.value || "");
-    unlockInput.value = "";
-    hide();
+    const ok = await createManagerPassword(createInput?.value || "", createConfirm?.value || "");
+    if (ok) hide();
+    createForm.reset();
   });
 
-  const pwdForm = document.getElementById("settingsPasswordForm");
-  const pwdInput = document.getElementById("settingsPasswordInput");
-  pwdForm?.addEventListener("submit", async e => {
+  const changeForm = document.getElementById("settingsChangePasswordForm");
+  const oldPwd = document.getElementById("settingsOldPassword");
+  const newPwd = document.getElementById("settingsNewPassword");
+  const newConfirm = document.getElementById("settingsNewPasswordConfirm");
+  changeForm?.addEventListener("submit", async e => {
     e.preventDefault();
-    const ok = await setManagerPassword(pwdInput?.value || "");
-    if (ok && !managerUnlocked) await handleUnlock(pwdInput?.value || "");
-    if (pwdInput) pwdInput.value = "";
+    const ok = await changeManagerPassword(oldPwd?.value || "", newPwd?.value || "", newConfirm?.value || "");
+    if (ok) hide();
+    changeForm.reset();
   });
 }
 
@@ -3235,7 +3545,8 @@ function updateOrientationLayout() {
  *   INIT GLOBALE
  ********************************************/
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  await ensureDefaultManagerPassword();
   loadState();
   loadArchives();
   initHeaderDate();
@@ -3254,10 +3565,18 @@ document.addEventListener("DOMContentLoaded", () => {
   initHistoriqueEquipes();
   initTheme();
   initSettingsPanel();
+  initManagerUnlockModal();
 
   updateOrientationLayout();
   window.addEventListener("resize", updateOrientationLayout);
   window.addEventListener("orientationchange", updateOrientationLayout);
 
-  showSection(state.currentSection || "atelier");
+  const initialSection = state.currentSection || "atelier";
+  if (initialSection === "manager" && isManagerLocked()) {
+    showSection("atelier");
+    const unlocked = await promptManagerUnlock();
+    if (unlocked) showSection("manager");
+  } else {
+    showSection(initialSection);
+  }
 });
