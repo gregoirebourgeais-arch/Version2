@@ -130,29 +130,6 @@ body.compact-header .app-sub-title {
   background: rgba(77, 163, 255, 0.1);
 }
 
-.history-files-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.history-file-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-#history-files-table th,
-#history-files-table td {
-  white-space: nowrap;
-}
-
-#historyPareto {
-  display: block;
-  min-height: 320px;
-}
-
 .icon-btn {
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.04);
