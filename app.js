@@ -7,10 +7,8 @@
 const LINES = [
   "Râpé",
   "T2",
-  "RT",
   "OMORI",
   "T1",
-  "Sticks",
   "Emballage",
   "Dés",
   "Filets",
@@ -57,8 +55,6 @@ const ARRET_MACHINES = {
   "Dés": ["Cheesix", "Meca 2002", "DPM", "Bizerba", "Scotcheuse"],
   "Filets": ["Lieuse", "C-Pack", "Etiqueteuse", "Scotcheuse"],
   "Prédécoupé": ["DPM", "Selvex", "Bizerba", "Quartivac", "Scotcheuse"],
-  "RT": ["Autre"],
-  "Sticks": ["Autre"],
 };
 
 // === ÉTAT GLOBAL ===
@@ -83,6 +79,8 @@ let state = {
     selectedPlanWeek: "",
   },
 };
+
+const PLANNING_DAY_LABELS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
 
 // Références pour page Arrêts
 let arretLineEl = null;
@@ -268,10 +266,10 @@ function loadState() {
     }
     const parsed = JSON.parse(raw);
 
-    const base = {
-      currentSection: "atelier",
-      currentLine: LINES[0],
-      currentEquipe: "M",
+  const base = {
+    currentSection: "atelier",
+    currentLine: LINES[0],
+    currentEquipe: "M",
       production: {},
       arrets: [],
       organisation: [],
@@ -290,11 +288,15 @@ function loadState() {
       },
     };
 
-    state = Object.assign(base, parsed);
+  state = Object.assign(base, parsed);
 
-    LINES.forEach(l => {
-      if (!state.production[l]) state.production[l] = [];
-      if (!state.formDraft[l]) state.formDraft[l] = {};
+  if (!LINES.includes(state.currentLine)) {
+    state.currentLine = LINES[0];
+  }
+
+  LINES.forEach(l => {
+    if (!state.production[l]) state.production[l] = [];
+    if (!state.formDraft[l]) state.formDraft[l] = {};
     });
 
     if (!state.excelRecords) state.excelRecords = [];
@@ -3981,6 +3983,18 @@ function renderPlanningCadences() {
   if (datalist) {
     datalist.innerHTML = state.planning.cadences.map(c => `<option value="${c.code}"></option>`).join("");
   }
+
+  updatePlanningOFPrereq();
+}
+
+function updatePlanningOFPrereq() {
+  const btn = document.getElementById("planningOFAddBtn");
+  const helper = document.getElementById("planningOFPrereq");
+  const hasCadences = state.planning.cadences.length > 0;
+  if (btn) btn.disabled = !hasCadences;
+  if (helper) helper.textContent = hasCadences
+    ? "Choisis un code article enregistré pour générer un OF."
+    : "Enregistre d'abord les cadences articles pour activer la création d'OF.";
 }
 
 function refreshPlanningLineSelectors() {
@@ -3992,6 +4006,12 @@ function refreshPlanningLineSelectors() {
   selects.forEach(sel => {
     if (!sel) return;
     sel.innerHTML = "";
+    if (sel.id === "planningArretLine") {
+      const allOpt = document.createElement("option");
+      allOpt.value = "ALL";
+      allOpt.textContent = "Toutes les lignes";
+      sel.appendChild(allOpt);
+    }
     LINES.forEach(line => {
       const opt = document.createElement("option");
       opt.value = line;
@@ -4015,6 +4035,7 @@ function addPlanningCadence() {
   else state.planning.cadences.push(payload);
   saveState();
   renderPlanningCadences();
+  updatePlanningOFPrereq();
 }
 
 function addPlanningStop() {
@@ -4025,16 +4046,23 @@ function addPlanningStop() {
   const duration = Number(document.getElementById("planningArretDuration")?.value) || 0;
   const comment = document.getElementById("planningArretComment")?.value || "";
 
-  const startDate = toDateFromDay(day, startTime);
-  const stop = {
-    id: generateId(),
-    type,
-    line,
-    duration,
-    start: startDate.toISOString(),
-    comment,
-  };
-  state.planning.arretsPlanifies.push(stop);
+  const targetLines = line === "ALL" ? [...LINES] : [line];
+  const targetDays = `${day}` === "ALL" ? [0, 1, 2, 3, 4, 5] : [Number(day)];
+
+  targetLines.forEach(L => {
+    targetDays.forEach(d => {
+      const startDate = toDateFromDay(d, startTime);
+      const stop = {
+        id: generateId(),
+        type,
+        line: L,
+        duration,
+        start: startDate.toISOString(),
+        comment,
+      };
+      state.planning.arretsPlanifies.push(stop);
+    });
+  });
   saveState();
   refreshPlanningGantt();
 }
@@ -4047,7 +4075,16 @@ function addPlanningOF() {
   const startTime = document.getElementById("planningOFStart")?.value || "00:00";
   const manualCad = Number(document.getElementById("planningOFcadence")?.value) || null;
 
+  if (!state.planning.cadences.length) {
+    alert("Commence par enregistrer les codes articles et cadences avant de créer un OF.");
+    return;
+  }
+
   const cadenceInfo = getCadenceForArticle(code, line);
+  if (!cadenceInfo) {
+    alert("Code article inconnu : ajoute-le dans 'Cadences articles' avant de créer l'OF.");
+    return;
+  }
   const cadence = manualCad || (cadenceInfo ? cadenceInfo.cadence : 0);
   const poids = cadenceInfo ? cadenceInfo.poids : 0;
   const label = cadenceInfo ? cadenceInfo.label : "";
@@ -4083,6 +4120,43 @@ function refreshPlanningGantt() {
   const end = getPlanningWeekEndDate();
 
   gantt.innerHTML = "";
+
+  const axis = document.createElement("div");
+  axis.className = "gantt-axis";
+  const axisLabel = document.createElement("div");
+  axisLabel.className = "gantt-axis-label";
+  axisLabel.textContent = "Jours / heures";
+  const axisTimeline = document.createElement("div");
+  axisTimeline.className = "gantt-axis-timeline";
+
+  let minutesCursor = 0;
+  const dayDurations = [24, 24, 24, 24, 24, 12];
+  dayDurations.forEach((hours, idx) => {
+    const minutes = hours * 60;
+    const leftPct = (minutesCursor / WEEK_TOTAL_MINUTES) * 100;
+    const widthPct = (minutes / WEEK_TOTAL_MINUTES) * 100;
+    const band = document.createElement("div");
+    band.className = "gantt-axis-day";
+    band.style.left = `${leftPct}%`;
+    band.style.width = `${widthPct}%`;
+    band.textContent = PLANNING_DAY_LABELS[idx] || "";
+    axisTimeline.appendChild(band);
+
+    for (let h = 0; h <= hours; h += 6) {
+      const tick = document.createElement("div");
+      tick.className = "gantt-axis-tick";
+      const minuteOffset = minutesCursor + h * 60;
+      tick.style.left = `${(minuteOffset / WEEK_TOTAL_MINUTES) * 100}%`;
+      tick.textContent = `${String(h % 24).padStart(2, "0")}h`;
+      axisTimeline.appendChild(tick);
+    }
+
+    minutesCursor += minutes;
+  });
+
+  axis.appendChild(axisLabel);
+  axis.appendChild(axisTimeline);
+  gantt.appendChild(axis);
 
   LINES.forEach(line => {
     const row = document.createElement("div");
@@ -4139,15 +4213,29 @@ function refreshPlanningGantt() {
 
       const title = document.createElement("div");
       title.className = "title";
-      title.textContent = ev.kind === "stop" ? ev.type : ev.code || "OF";
+      title.textContent = ev.kind === "stop" ? ev.type : [ev.code || "OF", ev.label].filter(Boolean).join(" — ");
 
       const meta = document.createElement("div");
       meta.className = "meta";
-      const labelLine = ev.kind === "stop" ? (ev.comment || "") : `${formatTimeShort(ev.start)} → ${formatTimeShort(ev.end)} | ${ev.quantity || ""} u`;
+      const labelLine = ev.kind === "stop"
+        ? `${formatPlanningDay(ev.start)} ${formatTimeShort(ev.start)} → ${formatTimeShort(ev.end)} • ${(ev.duration || 0)} min`
+        : `${formatPlanningDay(ev.start)} ${formatTimeShort(ev.start)} → ${formatPlanningDay(ev.end)} ${formatTimeShort(ev.end)} • ${ev.quantity || ""} colis`;
       meta.textContent = labelLine;
 
       block.appendChild(title);
       block.appendChild(meta);
+      if (ev.kind !== "stop" && ev.label) {
+        const desc = document.createElement("div");
+        desc.className = "meta meta-secondary";
+        desc.textContent = ev.label;
+        block.appendChild(desc);
+      }
+      if (ev.kind === "stop" && ev.comment) {
+        const desc = document.createElement("div");
+        desc.className = "meta meta-secondary";
+        desc.textContent = ev.comment;
+        block.appendChild(desc);
+      }
       if (ev.blockedReason) {
         const reason = document.createElement("div");
         reason.className = "meta";
@@ -4166,6 +4254,13 @@ function refreshPlanningGantt() {
 function formatTimeShort(dateLike) {
   const d = new Date(dateLike);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function formatPlanningDay(dateLike) {
+  const base = getPlanningWeekStartDate();
+  const diff = Math.floor((new Date(dateLike) - base) / 86400000);
+  if (diff < 0) return "";
+  return PLANNING_DAY_LABELS[Math.min(diff, PLANNING_DAY_LABELS.length - 1)] || "";
 }
 
 function updatePlanningStatusFromProduction(line, rec) {
@@ -4358,9 +4453,9 @@ function launchPlanningSnapshot() {
   state.planning.weekStart = snap.start;
   state.planning.orders = JSON.parse(JSON.stringify(snap.orders || []));
   state.planning.arretsPlanifies = JSON.parse(JSON.stringify(snap.arretsPlanifies || []));
-  state.planning.cadences = JSON.parse(JSON.stringify(snap.cadences || []));
   saveState();
   renderPlanningCadences();
+  updatePlanningOFPrereq();
   refreshPlanningGantt();
   refreshPlanningDelays();
 }

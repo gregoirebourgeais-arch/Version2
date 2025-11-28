@@ -1608,6 +1608,49 @@ body.is-landscape {
   padding: 12px;
   background: var(--surface-color);
   overflow-x: auto;
+  position: relative;
+}
+
+.gantt-axis {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding-bottom: 6px;
+  background: var(--surface-color);
+}
+
+.gantt-axis-label {
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.gantt-axis-timeline {
+  position: relative;
+  min-height: 42px;
+  min-width: 1400px;
+}
+
+.gantt-axis-day {
+  position: absolute;
+  top: 6px;
+  height: 18px;
+  font-size: 0.82rem;
+  color: var(--muted-text);
+  text-align: center;
+  line-height: 18px;
+  border-left: 1px dashed var(--border-color);
+}
+
+.gantt-axis-tick {
+  position: absolute;
+  bottom: 4px;
+  font-size: 0.75rem;
+  color: var(--muted-text);
+  transform: translateX(-50%);
+  white-space: nowrap;
 }
 
 .gantt-row {
@@ -1634,6 +1677,7 @@ body.is-landscape {
   background: linear-gradient(90deg, rgba(0,0,0,0.03) 0, rgba(0,0,0,0.03) 100%);
   border-radius: 8px;
   overflow: hidden;
+  min-width: 1400px;
 }
 
 .gantt-day-split {
@@ -1647,7 +1691,7 @@ body.is-landscape {
 .gantt-block {
   position: absolute;
   top: 8px;
-  height: 48px;
+  min-height: 56px;
   border-radius: 6px;
   color: #0b1f2a;
   font-size: 0.85rem;
@@ -1670,12 +1714,16 @@ body.is-landscape {
 .gantt-block .meta {
   font-size: 0.75rem;
 }
+.gantt-block .meta.meta-secondary {
+  font-size: 0.72rem;
+  color: var(--muted-text);
+}
 
-.gantt-block.planned { background: #ffffff; border: 1px solid #cfd8dc; }
-.gantt-block.running { background: #d7ebff; border: 1px solid #90caf9; }
-.gantt-block.done { background: #d4f4dd; border: 1px solid #7bd68c; }
-.gantt-block.blocked { background: #ffd6d6; border: 1px solid #ef5350; }
-.gantt-block.stop { background: #f9e7c8; border: 1px solid #f4b400; }
+.gantt-block.planned { background: #ffe6c7; border: 1px solid #ff9800; color: #4a2d00; }
+.gantt-block.running { background: #cfe4ff; border: 1px solid #1e88e5; color: #0c356d; }
+.gantt-block.done { background: #c8f7d4; border: 1px solid #2e7d32; color: #1b4f1f; }
+.gantt-block.blocked { background: #ffc4c4; border: 1px solid #c62828; color: #5f1111; }
+.gantt-block.stop { background: #ffe6a7; border: 1px solid #f4b400; color: #5a4300; }
 
 .gantt-block.stop { cursor: default; }
 
@@ -1701,11 +1749,11 @@ body.is-landscape {
   border: 1px solid rgba(0,0,0,0.08);
 }
 
-.legend-dot.planned { background: #ffffff; }
-.legend-dot.running { background: #d7ebff; }
-.legend-dot.done { background: #d4f4dd; }
-.legend-dot.blocked { background: #ffd6d6; }
-.legend-dot.stop { background: #f9e7c8; }
+.legend-dot.planned { background: #ffe6c7; }
+.legend-dot.running { background: #cfe4ff; }
+.legend-dot.done { background: #c8f7d4; }
+.legend-dot.blocked { background: #ffc4c4; }
+.legend-dot.stop { background: #ffe6a7; }
 
 .planning-actions-row {
   display: flex;
