@@ -4226,17 +4226,25 @@ function openPlanningEditor(id) {
   document.getElementById("planningEditStatus").value = of.status || "planned";
   document.getElementById("planningEditBlockReason").value = of.blockedReason || "";
   modal.hidden = false;
+  modal.classList.remove("hidden");
 }
 
 function closePlanningEditor() {
   const modal = document.getElementById("planningBlockEditor");
-  if (modal) modal.hidden = true;
+  if (modal) {
+    modal.hidden = true;
+    modal.classList.add("hidden");
+  }
   planningEditId = null;
 }
 
 function bindPlanningEditor() {
   const saveBtn = document.getElementById("planningEditSaveBtn");
   const cancelBtn = document.getElementById("planningEditCancelBtn");
+  const modal = document.getElementById("planningBlockEditor");
+  const modalContent = modal?.querySelector(".modal-content");
+  closePlanningEditor();
+
   cancelBtn?.addEventListener("click", closePlanningEditor);
   saveBtn?.addEventListener("click", () => {
     if (!planningEditId) return;
@@ -4254,6 +4262,12 @@ function bindPlanningEditor() {
     refreshPlanningGantt();
     closePlanningEditor();
   });
+
+  modal?.addEventListener("click", (e) => {
+    if (e.target === modal) closePlanningEditor();
+  });
+
+  modalContent?.addEventListener("click", e => e.stopPropagation());
 }
 
 function bindPlanning() {
