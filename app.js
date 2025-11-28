@@ -73,6 +73,15 @@ let state = {
   excelRecords: [],
   excelFiles: [],
   formDraft: {},
+  planning: {
+    weekNumber: "",
+    weekStart: "",
+    orders: [],
+    arretsPlanifies: [],
+    cadences: [],
+    savedPlans: [],
+    selectedPlanWeek: "",
+  },
 };
 
 // Références pour page Arrêts
@@ -270,6 +279,15 @@ function loadState() {
       excelRecords: [],
       excelFiles: [],
       formDraft: {},
+      planning: {
+        weekNumber: "",
+        weekStart: "",
+        orders: [],
+        arretsPlanifies: [],
+        cadences: [],
+        savedPlans: [],
+        selectedPlanWeek: "",
+      },
     };
 
     state = Object.assign(base, parsed);
@@ -281,6 +299,13 @@ function loadState() {
 
     if (!state.excelRecords) state.excelRecords = [];
     if (!state.excelFiles) state.excelFiles = [];
+    if (!state.planning) {
+      state.planning = { ...base.planning };
+    }
+    if (!state.planning.orders) state.planning.orders = [];
+    if (!state.planning.arretsPlanifies) state.planning.arretsPlanifies = [];
+    if (!state.planning.cadences) state.planning.cadences = [];
+    if (!state.planning.savedPlans) state.planning.savedPlans = [];
 
   } catch (e) {
     console.error("loadState error", e);
@@ -1880,6 +1905,10 @@ function showSection(section) {
     refreshManagerImports();
     refreshManagerResults();
   }
+  else if (section === "planning") {
+    refreshPlanningGantt();
+    refreshPlanningDelays();
+  }
 }
 
 function initNav() {
@@ -2144,6 +2173,8 @@ function bindProductionForm() {
 
       state.production[L].push(rec);
 
+      updatePlanningStatusFromProduction(L, rec);
+
       // pré-remplir la prochaine saisie avec l'heure de fin actuelle
       state.formDraft[L] = {
         start: rec.end || "",
@@ -2153,6 +2184,7 @@ function bindProductionForm() {
       refreshProductionForm();
       refreshProductionHistoryTable();
       refreshAtelierView();
+      refreshPlanningGantt();
 
       if (rec.arret > 0) {
         openArretFromProduction(L, rec.arret);
@@ -2277,6 +2309,7 @@ function initArretsForm() {
 
       refreshArretsView();
       refreshAtelierView();
+      refreshPlanningGantt();
     });
   }
 }
@@ -3794,6 +3827,583 @@ function initSettingsPanel() {
 }
 
 /********************************************
+ *   PARTIE 4B – PLANNING (GANTT)
+ ********************************************/
+
+const WEEK_TOTAL_MINUTES = (5 * 24 + 12) * 60; // lundi 00:00 → samedi 12:00
+let planningEditId = null;
+
+function getMonday(d = new Date()) {
+  const date = new Date(d);
+  const day = (date.getDay() + 6) % 7; // 0 = lundi
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - day);
+  return date;
+}
+
+function formatDateInput(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+function ensurePlanningDefaults() {
+  if (!state.planning) return;
+  if (!state.planning.weekStart) {
+    const monday = getMonday();
+    state.planning.weekStart = formatDateInput(monday);
+    state.planning.weekNumber = getISOWeek(monday);
+  }
+  if (!state.planning.weekNumber) {
+    state.planning.weekNumber = getISOWeek(new Date(state.planning.weekStart));
+  }
+}
+
+function getPlanningWeekStartDate() {
+  ensurePlanningDefaults();
+  const d = new Date(state.planning.weekStart || new Date());
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getPlanningWeekEndDate() {
+  const start = getPlanningWeekStartDate();
+  const end = new Date(start);
+  end.setMinutes(end.getMinutes() + WEEK_TOTAL_MINUTES);
+  return end;
+}
+
+function getISOWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+function toDateFromDay(dayIndex, timeValue) {
+  const start = getPlanningWeekStartDate();
+  const d = new Date(start);
+  d.setDate(d.getDate() + Number(dayIndex || 0));
+  if (timeValue) {
+    const [h, m] = timeValue.split(":").map(Number);
+    d.setHours(h || 0, m || 0, 0, 0);
+  }
+  return d;
+}
+
+function getCadenceForArticle(code, line) {
+  const lower = (code || "").toLowerCase();
+  const match = state.planning.cadences.find(c => c.code.toLowerCase() === lower && (!line || c.line === line));
+  if (match) return match;
+  return state.planning.cadences.find(c => c.code.toLowerCase() === lower) || null;
+}
+
+function computeOrderDurationMinutes(order) {
+  const qty = Number(order.quantity) || 0;
+  const cad = Number(order.cadence) || 0;
+  if (cad <= 0) return Math.max(30, qty);
+  return (qty / cad) * 60;
+}
+
+function recalibrateLine(line) {
+  const orders = state.planning.orders.filter(o => o.line === line);
+  const stops = getAllStopsForLine(line);
+  const events = [...orders.map(o => ({ ...o, kind: "of" })), ...stops.map(s => ({ ...s, kind: "stop" }))]
+    .sort((a, b) => new Date(a.start) - new Date(b.start));
+
+  let cursor = null;
+  events.forEach(ev => {
+    const start = new Date(ev.start);
+    const end = new Date(ev.end);
+
+    if (ev.kind === "stop") {
+      cursor = cursor && cursor > end ? cursor : end;
+      return;
+    }
+
+    let finalStart = start;
+    if (cursor && start < cursor) {
+      finalStart = new Date(cursor);
+    }
+    const duration = computeOrderDurationMinutes(ev);
+    const finalEnd = new Date(finalStart.getTime() + duration * 60000);
+
+    ev.start = finalStart.toISOString();
+    ev.end = finalEnd.toISOString();
+    cursor = finalEnd;
+  });
+
+  events.filter(e => e.kind === "of").forEach(e => {
+    const idx = state.planning.orders.findIndex(o => o.id === e.id);
+    if (idx >= 0) state.planning.orders[idx] = { ...state.planning.orders[idx], start: e.start, end: e.end };
+  });
+}
+
+function getAllStopsForLine(line) {
+  const startWeek = getPlanningWeekStartDate();
+  const endWeek = getPlanningWeekEndDate();
+
+  const plannedStops = (state.planning.arretsPlanifies || [])
+    .filter(a => a.line === line)
+    .map(a => ({
+      ...a,
+      start: a.start,
+      end: new Date(new Date(a.start).getTime() + (Number(a.duration) || 0) * 60000).toISOString(),
+      status: "stop",
+      label: a.type,
+    }));
+
+  const recStops = state.arrets
+    .filter(r => r.line === line)
+    .map(r => ({
+      start: new Date(r.dateTime).toISOString(),
+      end: new Date(new Date(r.dateTime).getTime() + (Number(r.duration) || 0) * 60000).toISOString(),
+      type: r.comment ? `Arrêt : ${r.comment}` : "Arrêt",
+      line: r.line,
+      duration: r.duration,
+      status: "stop",
+      id: `arret-${r.dateTime}-${r.duration}`,
+      comment: r.comment || "",
+    }))
+    .filter(s => new Date(s.start) >= startWeek && new Date(s.start) <= endWeek);
+
+  return [...plannedStops, ...recStops];
+}
+
+function renderPlanningCadences() {
+  const container = document.getElementById("planningCadenceList");
+  const datalist = document.getElementById("planningArticleCodesList");
+  if (!container) return;
+  const rows = state.planning.cadences
+    .map(c => `<tr><td>${c.code}</td><td>${c.label || ""}</td><td>${c.cadence || "-"}</td><td>${c.poids || "-"} kg</td><td>${c.line || "-"}</td></tr>`)
+    .join("");
+  container.innerHTML = `<table><thead><tr><th>Code</th><th>Libellé</th><th>Cadence</th><th>Poids</th><th>Ligne</th></tr></thead><tbody>${rows || "<tr><td colspan=5>Aucune cadence enregistrée</td></tr>"}</tbody></table>`;
+
+  if (datalist) {
+    datalist.innerHTML = state.planning.cadences.map(c => `<option value="${c.code}"></option>`).join("");
+  }
+}
+
+function refreshPlanningLineSelectors() {
+  const selects = [
+    document.getElementById("planningArretLine"),
+    document.getElementById("planningArticleLine"),
+    document.getElementById("planningOFLine"),
+  ];
+  selects.forEach(sel => {
+    if (!sel) return;
+    sel.innerHTML = "";
+    LINES.forEach(line => {
+      const opt = document.createElement("option");
+      opt.value = line;
+      opt.textContent = line;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+function addPlanningCadence() {
+  const code = document.getElementById("planningArticleCode")?.value.trim();
+  if (!code) return;
+  const label = document.getElementById("planningArticleLabel")?.value.trim() || "";
+  const poids = Number(document.getElementById("planningArticlePoids")?.value) || 0;
+  const cadence = Number(document.getElementById("planningArticleCadence")?.value) || 0;
+  const line = document.getElementById("planningArticleLine")?.value || "";
+
+  const existingIdx = state.planning.cadences.findIndex(c => c.code.toLowerCase() === code.toLowerCase() && c.line === line);
+  const payload = { code, label, poids, cadence, line };
+  if (existingIdx >= 0) state.planning.cadences[existingIdx] = payload;
+  else state.planning.cadences.push(payload);
+  saveState();
+  renderPlanningCadences();
+}
+
+function addPlanningStop() {
+  const type = document.getElementById("planningArretType")?.value || "Autre";
+  const line = document.getElementById("planningArretLine")?.value || LINES[0];
+  const day = document.getElementById("planningArretDay")?.value || 0;
+  const startTime = document.getElementById("planningArretStart")?.value || "00:00";
+  const duration = Number(document.getElementById("planningArretDuration")?.value) || 0;
+  const comment = document.getElementById("planningArretComment")?.value || "";
+
+  const startDate = toDateFromDay(day, startTime);
+  const stop = {
+    id: generateId(),
+    type,
+    line,
+    duration,
+    start: startDate.toISOString(),
+    comment,
+  };
+  state.planning.arretsPlanifies.push(stop);
+  saveState();
+  refreshPlanningGantt();
+}
+
+function addPlanningOF() {
+  const code = document.getElementById("planningOFCode")?.value || "";
+  const line = document.getElementById("planningOFLine")?.value || LINES[0];
+  const qty = Number(document.getElementById("planningOFQty")?.value) || 0;
+  const day = document.getElementById("planningOFDay")?.value || 0;
+  const startTime = document.getElementById("planningOFStart")?.value || "00:00";
+  const manualCad = Number(document.getElementById("planningOFcadence")?.value) || null;
+
+  const cadenceInfo = getCadenceForArticle(code, line);
+  const cadence = manualCad || (cadenceInfo ? cadenceInfo.cadence : 0);
+  const poids = cadenceInfo ? cadenceInfo.poids : 0;
+  const label = cadenceInfo ? cadenceInfo.label : "";
+
+  const startDate = toDateFromDay(day, startTime);
+  const duration = (qty && cadence) ? (qty / cadence) * 60 : 60;
+  const endDate = new Date(startDate.getTime() + duration * 60000);
+
+  const of = {
+    id: generateId(),
+    code,
+    label,
+    line,
+    quantity: qty,
+    cadence,
+    poids,
+    start: startDate.toISOString(),
+    end: endDate.toISOString(),
+    status: "planned",
+    blockedReason: "",
+  };
+
+  state.planning.orders.push(of);
+  recalibrateLine(line);
+  saveState();
+  refreshPlanningGantt();
+}
+
+function refreshPlanningGantt() {
+  const gantt = document.getElementById("planningGantt");
+  if (!gantt) return;
+  const start = getPlanningWeekStartDate();
+  const end = getPlanningWeekEndDate();
+
+  gantt.innerHTML = "";
+
+  LINES.forEach(line => {
+    const row = document.createElement("div");
+    row.className = "gantt-row";
+
+    const label = document.createElement("div");
+    label.className = "gantt-line-label";
+    label.textContent = line;
+
+    const timeline = document.createElement("div");
+    timeline.className = "gantt-line-timeline";
+    timeline.dataset.line = line;
+    timeline.addEventListener("dragover", e => e.preventDefault());
+    timeline.addEventListener("drop", handlePlanningDrop);
+
+    for (let i = 1; i <= 5; i++) {
+      const split = document.createElement("div");
+      split.className = "gantt-day-split";
+      split.style.left = `${(i * 24 * 60) / WEEK_TOTAL_MINUTES * 100}%`;
+      timeline.appendChild(split);
+    }
+
+    const stops = getAllStopsForLine(line);
+    const orders = state.planning.orders.filter(o => o.line === line);
+    const events = [
+      ...orders.map(o => ({ ...o, kind: "of" })),
+      ...stops.map(s => ({ ...s, kind: "stop" })),
+    ];
+
+    events.forEach(ev => {
+      const s = new Date(ev.start);
+      const e = new Date(ev.end || ev.start);
+      if (e < start || s > end) return;
+      const durationMin = Math.max(5, (e - s) / 60000);
+      const offsetMin = Math.max(0, (s - start) / 60000);
+      const leftPct = (offsetMin / WEEK_TOTAL_MINUTES) * 100;
+      const widthPct = Math.min(100 - leftPct, (durationMin / WEEK_TOTAL_MINUTES) * 100);
+
+      const block = document.createElement("div");
+      block.className = `gantt-block ${ev.kind === "stop" ? "stop" : (ev.status || "planned")}`;
+      block.style.left = `${leftPct}%`;
+      block.style.width = `${Math.max(widthPct, 0.5)}%`;
+      block.draggable = ev.kind !== "stop";
+      block.dataset.id = ev.id;
+      block.dataset.line = line;
+      block.dataset.kind = ev.kind;
+      block.addEventListener("click", () => {
+        if (ev.kind === "stop") return;
+        openPlanningEditor(ev.id);
+      });
+      block.addEventListener("dragstart", e => {
+        e.dataTransfer.setData("text/planning-order", ev.id);
+      });
+
+      const title = document.createElement("div");
+      title.className = "title";
+      title.textContent = ev.kind === "stop" ? ev.type : ev.code || "OF";
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      const labelLine = ev.kind === "stop" ? (ev.comment || "") : `${formatTimeShort(ev.start)} → ${formatTimeShort(ev.end)} | ${ev.quantity || ""} u`;
+      meta.textContent = labelLine;
+
+      block.appendChild(title);
+      block.appendChild(meta);
+      if (ev.blockedReason) {
+        const reason = document.createElement("div");
+        reason.className = "meta";
+        reason.textContent = `Blocage : ${ev.blockedReason}`;
+        block.appendChild(reason);
+      }
+      timeline.appendChild(block);
+    });
+
+    row.appendChild(label);
+    row.appendChild(timeline);
+    gantt.appendChild(row);
+  });
+}
+
+function formatTimeShort(dateLike) {
+  const d = new Date(dateLike);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function updatePlanningStatusFromProduction(line, rec) {
+  if (!state.planning || !state.planning.orders?.length) return;
+  const baseDate = rec.dateTime ? new Date(rec.dateTime) : new Date();
+  const makeDate = (t) => {
+    if (!t) return null;
+    const d = new Date(baseDate);
+    const [h, m] = t.split(":").map(Number);
+    d.setHours(h || 0, m || 0, 0, 0);
+    return d;
+  };
+  const startD = makeDate(rec.start);
+  const endD = makeDate(rec.end);
+
+  const orders = state.planning.orders.filter(o => o.line === line);
+  const matchStart = orders.find(o => startD && new Date(o.start) <= startD && startD <= new Date(o.end));
+  const matchEnd = orders.find(o => endD && new Date(o.start) <= endD && endD <= new Date(o.end));
+  if (matchStart) {
+    matchStart.status = "running";
+    matchStart.produced = (matchStart.produced || 0) + (Number(rec.quantity) || 0);
+  }
+  if (matchEnd) {
+    matchEnd.status = "done";
+  }
+  saveState();
+}
+
+function handlePlanningDrop(e) {
+  e.preventDefault();
+  const id = e.dataTransfer.getData("text/planning-order");
+  if (!id) return;
+  const line = e.currentTarget.dataset.line;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const ratio = (e.clientX - rect.left) / rect.width;
+  const minutes = Math.max(0, Math.min(WEEK_TOTAL_MINUTES, ratio * WEEK_TOTAL_MINUTES));
+  const startDate = new Date(getPlanningWeekStartDate().getTime() + minutes * 60000);
+
+  const order = state.planning.orders.find(o => o.id === id);
+  if (!order) return;
+  order.line = line;
+  order.start = startDate.toISOString();
+  const duration = computeOrderDurationMinutes(order);
+  order.end = new Date(startDate.getTime() + duration * 60000).toISOString();
+  recalibrateLine(line);
+  saveState();
+  refreshPlanningGantt();
+}
+
+function openPlanningEditor(id) {
+  const modal = document.getElementById("planningBlockEditor");
+  const of = state.planning.orders.find(o => o.id === id);
+  if (!modal || !of) return;
+  planningEditId = id;
+  document.getElementById("planningEditQty").value = of.quantity || 0;
+  document.getElementById("planningEditStart").value = of.start ? of.start.slice(0, 16) : "";
+  document.getElementById("planningEditEnd").value = of.end ? of.end.slice(0, 16) : "";
+  document.getElementById("planningEditStatus").value = of.status || "planned";
+  document.getElementById("planningEditBlockReason").value = of.blockedReason || "";
+  modal.hidden = false;
+}
+
+function closePlanningEditor() {
+  const modal = document.getElementById("planningBlockEditor");
+  if (modal) modal.hidden = true;
+  planningEditId = null;
+}
+
+function bindPlanningEditor() {
+  const saveBtn = document.getElementById("planningEditSaveBtn");
+  const cancelBtn = document.getElementById("planningEditCancelBtn");
+  cancelBtn?.addEventListener("click", closePlanningEditor);
+  saveBtn?.addEventListener("click", () => {
+    if (!planningEditId) return;
+    const of = state.planning.orders.find(o => o.id === planningEditId);
+    if (!of) return;
+    of.quantity = Number(document.getElementById("planningEditQty")?.value) || of.quantity;
+    const newStart = document.getElementById("planningEditStart")?.value;
+    const newEnd = document.getElementById("planningEditEnd")?.value;
+    if (newStart) of.start = new Date(newStart).toISOString();
+    if (newEnd) of.end = new Date(newEnd).toISOString();
+    of.status = document.getElementById("planningEditStatus")?.value || of.status;
+    of.blockedReason = document.getElementById("planningEditBlockReason")?.value || "";
+    recalibrateLine(of.line);
+    saveState();
+    refreshPlanningGantt();
+    closePlanningEditor();
+  });
+}
+
+function bindPlanning() {
+  ensurePlanningDefaults();
+  refreshPlanningLineSelectors();
+  renderPlanningCadences();
+
+  const weekNumberInput = document.getElementById("planningWeekNumber");
+  const weekStartInput = document.getElementById("planningWeekStart");
+  if (weekNumberInput) weekNumberInput.value = state.planning.weekNumber || "";
+  if (weekStartInput) weekStartInput.value = state.planning.weekStart || formatDateInput(getMonday());
+
+  weekNumberInput?.addEventListener("input", () => {
+    state.planning.weekNumber = weekNumberInput.value;
+    saveState();
+  });
+  weekStartInput?.addEventListener("change", () => {
+    state.planning.weekStart = weekStartInput.value;
+    saveState();
+    refreshPlanningGantt();
+  });
+
+  document.getElementById("planningArticleAddBtn")?.addEventListener("click", addPlanningCadence);
+  document.getElementById("planningArretAddBtn")?.addEventListener("click", addPlanningStop);
+  document.getElementById("planningOFAddBtn")?.addEventListener("click", addPlanningOF);
+
+  document.getElementById("planningRebuildBtn")?.addEventListener("click", () => {
+    LINES.forEach(recalibrateLine);
+    saveState();
+    refreshPlanningGantt();
+  });
+
+  document.getElementById("planningScrollTopBtn")?.addEventListener("click", () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  document.getElementById("planningShowDelaysBtn")?.addEventListener("click", refreshPlanningDelays);
+
+  document.getElementById("planningValidateBtn")?.addEventListener("click", savePlanningSnapshot);
+  document.getElementById("planningLaunchBtn")?.addEventListener("click", launchPlanningSnapshot);
+
+  bindPlanningEditor();
+  refreshSavedPlanningList();
+  refreshPlanningGantt();
+  refreshPlanningDelays();
+}
+
+function savePlanningSnapshot() {
+  const week = document.getElementById("planningWeekNumber")?.value || state.planning.weekNumber || "";
+  const start = document.getElementById("planningWeekStart")?.value || state.planning.weekStart;
+  if (!week || !start) return;
+  const snapshot = {
+    week,
+    start,
+    savedAt: new Date().toISOString(),
+    orders: JSON.parse(JSON.stringify(state.planning.orders || [])),
+    arretsPlanifies: JSON.parse(JSON.stringify(state.planning.arretsPlanifies || [])),
+    cadences: JSON.parse(JSON.stringify(state.planning.cadences || [])),
+  };
+  const existingIdx = state.planning.savedPlans.findIndex(p => p.week === week);
+  if (existingIdx >= 0) state.planning.savedPlans[existingIdx] = snapshot;
+  else state.planning.savedPlans.push(snapshot);
+  state.planning.weekNumber = week;
+  state.planning.weekStart = start;
+  saveState();
+  refreshSavedPlanningList();
+}
+
+function refreshSavedPlanningList() {
+  const container = document.getElementById("planningSavedList");
+  if (!container) return;
+  if (!state.planning.savedPlans.length) {
+    container.textContent = "Aucun planning validé pour l'instant.";
+    return;
+  }
+  const rows = state.planning.savedPlans
+    .sort((a, b) => (b.week || 0) - (a.week || 0))
+    .map(p => `<div class="helper-text">Semaine ${p.week} – validé le ${formatDateTime(p.savedAt)}</div>`)
+    .join("");
+  container.innerHTML = rows;
+}
+
+function launchPlanningSnapshot() {
+  const targetWeek = document.getElementById("planningLaunchWeek")?.value || state.planning.weekNumber;
+  const snap = state.planning.savedPlans.find(p => `${p.week}` === `${targetWeek}`);
+  if (!snap) return;
+  state.planning.weekNumber = snap.week;
+  state.planning.weekStart = snap.start;
+  state.planning.orders = JSON.parse(JSON.stringify(snap.orders || []));
+  state.planning.arretsPlanifies = JSON.parse(JSON.stringify(snap.arretsPlanifies || []));
+  state.planning.cadences = JSON.parse(JSON.stringify(snap.cadences || []));
+  saveState();
+  renderPlanningCadences();
+  refreshPlanningGantt();
+  refreshPlanningDelays();
+}
+
+function refreshPlanningDelays() {
+  const container = document.getElementById("planningDelays");
+  if (!container) return;
+  const weekStart = getPlanningWeekStartDate();
+  const weekEnd = getPlanningWeekEndDate();
+  const now = new Date();
+  container.innerHTML = "";
+
+  LINES.forEach(line => {
+    const orders = state.planning.orders.filter(o => o.line === line);
+    let expectedQty = 0;
+    let expectedWeight = 0;
+    orders.forEach(of => {
+      const start = new Date(of.start);
+      const end = new Date(of.end);
+      const duration = Math.max(1, (end - start) / 60000);
+      const qty = Number(of.quantity) || 0;
+      const weight = (Number(of.poids) || 0) * qty;
+      if (now <= start) return;
+      const ref = Math.min(now.getTime(), end.getTime());
+      const elapsed = Math.max(0, ref - start.getTime());
+      const ratio = Math.min(1, elapsed / (duration * 60000));
+      expectedQty += qty * ratio;
+      expectedWeight += weight * ratio;
+    });
+
+    const prods = state.production[line] || [];
+    let actualQty = 0;
+    let actualWeight = 0;
+    prods.forEach(p => {
+      const when = new Date(p.dateTime);
+      if (when < weekStart || when > weekEnd) return;
+      const qty = Number(p.quantity) || 0;
+      actualQty += qty;
+      const art = getCadenceForArticle(p.article || "", line);
+      if (art && art.poids) actualWeight += qty * art.poids;
+    });
+
+    const deltaQty = actualQty - expectedQty;
+    const deltaWeight = actualWeight - expectedWeight;
+
+    const card = document.createElement("div");
+    card.className = "delay-card";
+    card.innerHTML = `
+      <h4>${line}</h4>
+      <div>Avance/retard (colis) : <span class="${deltaQty >= 0 ? "delta-positive" : "delta-negative"}">${deltaQty.toFixed(1)}</span></div>
+      <div>Avance/retard (kg) : <span class="${deltaWeight >= 0 ? "delta-positive" : "delta-negative"}">${deltaWeight.toFixed(1)}</span></div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+/********************************************
  *   ORIENTATION
  ********************************************/
 
@@ -3827,6 +4437,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initTheme();
   initSettingsPanel();
   initManagerUnlockModal();
+  bindPlanning();
 
   updateOrientationLayout();
   window.addEventListener("resize", updateOrientationLayout);

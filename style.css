@@ -1532,3 +1532,213 @@ body.is-landscape {
   }
 }
 
+/* === PLANNING (GANTT) === */
+.planning-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.planning-header-actions label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+  color: var(--text-color);
+}
+
+.planning-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.planning-settings details {
+  margin-bottom: 10px;
+  background: var(--surface-color);
+  border-radius: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+}
+
+.planning-settings summary {
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.planning-inline {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.planning-mini-table {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--surface-color);
+  max-height: 220px;
+  overflow: auto;
+  font-size: 0.9rem;
+}
+
+.planning-mini-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.planning-mini-table th,
+.planning-mini-table td {
+  text-align: left;
+  padding: 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.gantt-wrapper {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--surface-color);
+  overflow-x: auto;
+}
+
+.gantt-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.gantt-row:last-child {
+  border-bottom: none;
+}
+
+.gantt-line-label {
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.gantt-line-timeline {
+  position: relative;
+  min-height: 64px;
+  background: linear-gradient(90deg, rgba(0,0,0,0.03) 0, rgba(0,0,0,0.03) 100%);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.gantt-day-split {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border-color);
+}
+
+.gantt-block {
+  position: absolute;
+  top: 8px;
+  height: 48px;
+  border-radius: 6px;
+  color: #0b1f2a;
+  font-size: 0.85rem;
+  padding: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  cursor: grab;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.gantt-block .title {
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.gantt-block .meta {
+  font-size: 0.75rem;
+}
+
+.gantt-block.planned { background: #ffffff; border: 1px solid #cfd8dc; }
+.gantt-block.running { background: #d7ebff; border: 1px solid #90caf9; }
+.gantt-block.done { background: #d4f4dd; border: 1px solid #7bd68c; }
+.gantt-block.blocked { background: #ffd6d6; border: 1px solid #ef5350; }
+.gantt-block.stop { background: #f9e7c8; border: 1px solid #f4b400; }
+
+.gantt-block.stop { cursor: default; }
+
+.planning-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.legend-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid rgba(0,0,0,0.08);
+}
+
+.legend-dot.planned { background: #ffffff; }
+.legend-dot.running { background: #d7ebff; }
+.legend-dot.done { background: #d4f4dd; }
+.legend-dot.blocked { background: #ffd6d6; }
+.legend-dot.stop { background: #f9e7c8; }
+
+.planning-actions-row {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.planning-delays {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.delay-card {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface-color);
+}
+
+.delay-card h4 { margin-bottom: 6px; }
+
+.delay-card .delta-positive { color: #2e7d32; font-weight: 700; }
+.delay-card .delta-negative { color: #c62828; font-weight: 700; }
+
+.modal .modal-content {
+  max-width: 520px;
+}
+
+@media (max-width: 900px) {
+  .gantt-row {
+    grid-template-columns: 1fr;
+  }
+
+  .gantt-line-timeline {
+    min-height: 80px;
+  }
+}
+
