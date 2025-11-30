@@ -1621,6 +1621,36 @@ body.is-landscape {
   justify-content: space-between;
 }
 
+.inline-with-action {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.gantt-preview {
+  opacity: 0.95;
+}
+
+.gantt-preview .gantt-line-timeline .gantt-block {
+  cursor: default;
+}
+
+.picker-section { margin-bottom: 12px; }
+.picker-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.list-btn {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: 0.2s;
+}
+.list-btn:hover { background: rgba(255,255,255,0.08); }
+
 .planning-view-card {
   grid-column: 1 / -1;
 }

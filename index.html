@@ -683,7 +683,10 @@
           <h3>Création planning</h3>
           <div class="form-grid">
             <label>Code article
-              <input type="text" id="planningOFCode" list="planningArticleCodesList" />
+              <div class="inline-with-action">
+                <input type="text" id="planningOFCode" list="planningArticleCodesList" />
+                <button type="button" class="icon-btn" id="planningArticlePickerBtn" aria-label="Parcourir les articles">ℹ️</button>
+              </div>
               <datalist id="planningArticleCodesList"></datalist>
             </label>
             <label>Ligne
@@ -724,6 +727,10 @@
             <button class="primary-btn" id="planningValidateBtn">✅ Valider le planning</button>
           </div>
           <div id="planningSavedList" class="planning-mini-table"></div>
+
+          <h4>Prévisualisation du planning</h4>
+          <p class="helper-text">Aperçu en lecture seule du planning construit avant validation.</p>
+          <div id="planningPreview" class="gantt-wrapper gantt-preview"></div>
         </div>
       </div>
 
@@ -758,6 +765,16 @@
         <div class="card">
           <h3>Avance / Retard lignes</h3>
           <div id="planningDelays" class="planning-delays"></div>
+        </div>
+      </div>
+
+      <div id="planningArticlePicker" class="popover hidden">
+        <div class="popover-content">
+          <div class="popover-header">
+            <h3>Codes articles par ligne</h3>
+            <button class="icon-btn" id="planningArticlePickerClose" aria-label="Fermer">✖</button>
+          </div>
+          <div id="planningArticlePickerBody"></div>
         </div>
       </div>
 

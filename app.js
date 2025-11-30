@@ -3906,6 +3906,10 @@ function computeOrderDurationMinutes(order) {
   return (qty / cad) * 60;
 }
 
+function rangesOverlap(aStart, aEnd, bStart, bEnd) {
+  return aStart < bEnd && aEnd > bStart;
+}
+
 function splitOrderWithStops(order, startDate, baseEnd, stops) {
   const relevant = (stops || [])
     .filter(s => new Date(s.end) > startDate && new Date(s.start) < baseEnd)
@@ -4038,6 +4042,67 @@ function updatePlanningOFPrereq() {
     : "Enregistre d'abord les cadences articles pour activer la création d'OF.";
 }
 
+function findArticleByCode(code) {
+  if (!code) return null;
+  const lower = code.toLowerCase();
+  return state.planning.cadences.find(c => c.code.toLowerCase() === lower) || null;
+}
+
+function autofillOFFieldsFromCode(code) {
+  const article = findArticleByCode(code);
+  const lineSelect = document.getElementById("planningOFLine");
+  const cadenceInput = document.getElementById("planningOFcadence");
+  if (article) {
+    if (lineSelect) lineSelect.value = article.line || "";
+    if (cadenceInput && (!cadenceInput.value || cadenceInput.value === "0")) {
+      cadenceInput.value = article.cadence || "";
+    }
+  }
+}
+
+function renderPlanningArticlePicker() {
+  const body = document.getElementById("planningArticlePickerBody");
+  if (!body) return;
+  if (!state.planning.cadences.length) {
+    body.innerHTML = "<p class=\"helper-text\">Aucun article enregistré pour le moment.</p>";
+    return;
+  }
+  const grouped = state.planning.cadences.reduce((acc, item) => {
+    acc[item.line] = acc[item.line] || [];
+    acc[item.line].push(item);
+    return acc;
+  }, {});
+  const sections = Object.keys(grouped).map(line => {
+    const rows = grouped[line]
+      .map(a => `<button class="list-btn" data-code="${a.code}" data-line="${a.line}" data-cadence="${a.cadence}" data-poids="${a.poids || 0}" data-label="${a.label || ""}"><strong>${a.code}</strong> — ${a.label || ""}<br><small>${a.cadence || ""} colis/h • ${a.poids || 0} kg/colis</small></button>`)
+      .join("");
+    return `<div class="picker-section"><h4>${line}</h4><div class="picker-grid">${rows}</div></div>`;
+  }).join("");
+  body.innerHTML = sections;
+  body.querySelectorAll(".list-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const codeInput = document.getElementById("planningOFCode");
+      const lineSelect = document.getElementById("planningOFLine");
+      const cadenceInput = document.getElementById("planningOFcadence");
+      if (codeInput) codeInput.value = btn.dataset.code || "";
+      if (lineSelect) lineSelect.value = btn.dataset.line || "";
+      if (cadenceInput) cadenceInput.value = btn.dataset.cadence || "";
+      closePlanningArticlePicker();
+    });
+  });
+}
+
+function openPlanningArticlePicker() {
+  renderPlanningArticlePicker();
+  const pop = document.getElementById("planningArticlePicker");
+  if (pop) pop.classList.remove("hidden");
+}
+
+function closePlanningArticlePicker() {
+  const pop = document.getElementById("planningArticlePicker");
+  if (pop) pop.classList.add("hidden");
+}
+
 function refreshPlanningLineSelectors() {
   const selects = [
     document.getElementById("planningArretLine"),
@@ -4112,7 +4177,9 @@ function addPlanningStop() {
 
 function addPlanningOF() {
   const code = document.getElementById("planningOFCode")?.value || "";
-  const line = document.getElementById("planningOFLine")?.value || LINES[0];
+  autofillOFFieldsFromCode(code);
+  const lineSelect = document.getElementById("planningOFLine");
+  let line = (lineSelect && lineSelect.value) || LINES[0];
   const qty = Number(document.getElementById("planningOFQty")?.value) || 0;
   const day = document.getElementById("planningOFDay")?.value || 0;
   const startTime = document.getElementById("planningOFStart")?.value || "00:00";
@@ -4128,6 +4195,8 @@ function addPlanningOF() {
     alert("Code article inconnu : ajoute-le dans 'Cadences articles' avant de créer l'OF.");
     return;
   }
+  line = cadenceInfo.line || line;
+  if (lineSelect) lineSelect.value = line;
   const cadence = manualCad || (cadenceInfo ? cadenceInfo.cadence : 0);
   const poids = cadenceInfo ? cadenceInfo.poids : 0;
   const label = cadenceInfo ? cadenceInfo.label : "";
@@ -4135,6 +4204,16 @@ function addPlanningOF() {
   const startDate = toDateFromDay(day, startTime);
   const duration = (qty && cadence) ? (qty / cadence) * 60 : 60;
   const endDate = new Date(startDate.getTime() + duration * 60000);
+
+  LINES.forEach(recalibrateLine);
+  const conflict = state.planning.orders.some(o => {
+    if (o.line !== line) return false;
+    return rangesOverlap(startDate, endDate, new Date(o.start), new Date(o.end));
+  });
+  if (conflict) {
+    alert("Un OF occupe déjà ce créneau sur cette ligne. Choisis un autre horaire ou déplace l'OF existant.");
+    return;
+  }
 
   const of = {
     id: generateId(),
@@ -4157,7 +4236,12 @@ function addPlanningOF() {
 }
 
 function refreshPlanningGantt() {
-  const gantt = document.getElementById("planningGantt");
+  renderPlanningGantt("planningGantt", { interactive: true });
+  renderPlanningGantt("planningPreview", { interactive: false });
+}
+
+function renderPlanningGantt(targetId, { interactive = true } = {}) {
+  const gantt = document.getElementById(targetId);
   if (!gantt) return;
   const start = getPlanningWeekStartDate();
   const end = getPlanningWeekEndDate();
@@ -4212,8 +4296,10 @@ function refreshPlanningGantt() {
     const timeline = document.createElement("div");
     timeline.className = "gantt-line-timeline";
     timeline.dataset.line = line;
-    timeline.addEventListener("dragover", e => e.preventDefault());
-    timeline.addEventListener("drop", handlePlanningDrop);
+    if (interactive) {
+      timeline.addEventListener("dragover", e => e.preventDefault());
+      timeline.addEventListener("drop", handlePlanningDrop);
+    }
 
     for (let i = 1; i <= 5; i++) {
       const split = document.createElement("div");
@@ -4260,17 +4346,19 @@ function refreshPlanningGantt() {
       block.className = `gantt-block ${ev.kind === "stop" ? "stop" : (ev.status || "planned")}`;
       block.style.left = `${leftPct}%`;
       block.style.width = `${Math.max(widthPct, 0.5)}%`;
-      block.draggable = ev.kind !== "stop";
+      block.draggable = interactive && ev.kind !== "stop";
       block.dataset.id = ev.id;
       block.dataset.line = line;
       block.dataset.kind = ev.kind;
-      block.addEventListener("click", () => {
-        if (ev.kind === "stop") return;
-        openPlanningEditor(ev.id);
-      });
-      block.addEventListener("dragstart", e => {
-        e.dataTransfer.setData("text/planning-order", ev.id);
-      });
+      if (interactive) {
+        block.addEventListener("click", () => {
+          if (ev.kind === "stop") return;
+          openPlanningEditor(ev.id);
+        });
+        block.addEventListener("dragstart", e => {
+          e.dataTransfer.setData("text/planning-order", ev.id);
+        });
+      }
 
       const title = document.createElement("div");
       title.className = "title";
@@ -4463,6 +4551,16 @@ function bindPlanning() {
   });
   setPlanningTab("articles");
 
+  document.getElementById("planningArticlePickerBtn")?.addEventListener("click", openPlanningArticlePicker);
+  document.getElementById("planningArticlePickerClose")?.addEventListener("click", closePlanningArticlePicker);
+  document.getElementById("planningArticlePicker")?.addEventListener("click", e => {
+    if (e.target.id === "planningArticlePicker") closePlanningArticlePicker();
+  });
+
+  const codeInput = document.getElementById("planningOFCode");
+  codeInput?.addEventListener("change", () => autofillOFFieldsFromCode(codeInput.value));
+  codeInput?.addEventListener("blur", () => autofillOFFieldsFromCode(codeInput.value));
+
   weekNumberInput?.addEventListener("input", () => {
     state.planning.weekNumber = weekNumberInput.value;
     saveState();
@@ -4506,9 +4604,16 @@ function bindPlanning() {
 }
 
 function savePlanningSnapshot() {
-  const week = document.getElementById("planningWeekNumber")?.value || state.planning.weekNumber || "";
+  let week = document.getElementById("planningWeekNumber")?.value || state.planning.weekNumber || "";
   const start = document.getElementById("planningWeekStart")?.value || state.planning.weekStart;
-  if (!week || !start) return;
+  if (!week && start) {
+    const monday = new Date(start);
+    week = getWeekNumber(monday);
+  }
+  if (!week || !start) {
+    alert("Renseigne la semaine et le lundi de référence avant de valider le planning.");
+    return;
+  }
   const snapshot = {
     week,
     start,
@@ -4524,6 +4629,10 @@ function savePlanningSnapshot() {
   state.planning.weekStart = start;
   saveState();
   refreshSavedPlanningList();
+  const editSelect = document.getElementById("planningEditSelect");
+  const launchSelect = document.getElementById("planningLaunchSelect");
+  if (editSelect) editSelect.value = `${week}`;
+  if (launchSelect) launchSelect.value = `${week}`;
 }
 
 function refreshSavedPlanningList() {
