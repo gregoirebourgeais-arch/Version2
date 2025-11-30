@@ -4646,6 +4646,7 @@ function savePlanningSnapshot() {
     alert("Renseigne la semaine et le lundi de référence avant de valider le planning.");
     return;
   }
+  if (!state.planning.savedPlans) state.planning.savedPlans = [];
   const snapshot = {
     week,
     start,
@@ -4668,6 +4669,8 @@ function savePlanningSnapshot() {
 
   state.planning.orders = [];
   state.planning.arretsPlanifies = [];
+  const preview = document.getElementById("planningPreview");
+  if (preview) preview.innerHTML = "<p class=\"helper-text\">Aucune prévisualisation en attente. Ajoute des OF pour voir l'aperçu.</p>";
   LINES.forEach(recalibrateLine);
   saveState();
   refreshPlanningGantt();
