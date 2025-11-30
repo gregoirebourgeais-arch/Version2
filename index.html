@@ -630,126 +630,117 @@
 
     <!-- PAGE PLANNING -->
     <section id="section-planning" class="section">
-      <div class="planning-header">
-        <h2>Planning (Gantt) - Lundi → Samedi matin</h2>
-        <div class="planning-header-actions">
-          <label>
-            Semaine
-            <input type="number" id="planningWeekNumber" min="1" max="53" />
-          </label>
-          <label>
-            Lundi de référence
-            <input type="date" id="planningWeekStart" />
-          </label>
-          <button class="secondary-btn" id="planningRebuildBtn">🔄 Recalage auto</button>
-          <button class="primary-btn" id="planningValidateBtn">✅ Valider le planning</button>
+      <div class="planning-tabs">
+        <button class="planning-tab-btn active" data-tab="articles">Création article</button>
+        <button class="planning-tab-btn" data-tab="build">Création planning</button>
+        <button class="planning-tab-btn" data-tab="run">Planning</button>
+      </div>
+
+      <div id="planning-tab-articles" class="planning-pane">
+        <div class="card">
+          <h3>Création article</h3>
+          <p class="helper-text">Définis les articles une fois pour toutes : code, libellé, ligne associée, poids colis et cadence. Les enregistrements restent valides pour toutes les semaines mais restent modifiables.</p>
+          <div class="form-grid">
+            <label>Code article
+              <input type="text" id="planningArticleCode" />
+            </label>
+            <label>Libellé
+              <input type="text" id="planningArticleLabel" />
+            </label>
+            <label>Poids colis (kg)
+              <input type="number" id="planningArticlePoids" step="0.01" min="0" />
+            </label>
+            <label>Cadence (colis/h)
+              <input type="number" id="planningArticleCadence" step="0.01" min="0" />
+            </label>
+            <label>Ligne par défaut
+              <select id="planningArticleLine"></select>
+            </label>
+          </div>
+          <div class="buttons-row">
+            <button class="secondary-btn" id="planningArticleAddBtn">Enregistrer l'article</button>
+          </div>
+          <div class="planning-mini-table" id="planningCadenceList"></div>
         </div>
       </div>
 
-      <div class="planning-grid">
+      <div id="planning-tab-build" class="planning-pane hidden">
         <div class="card">
-          <h3>Paramétrage</h3>
-          <div class="planning-settings">
-            <details open>
-              <summary>Arrêts prévus</summary>
-              <div class="form-grid">
-                <label>Type
-                  <select id="planningArretType">
-                    <option value="Pause">Pause</option>
-                    <option value="Maintenance">Maintenance</option>
-                    <option value="Réunion">Réunion</option>
-                    <option value="Autre">Autre</option>
-                  </select>
-                </label>
-                <label>Ligne
-                  <select id="planningArretLine"></select>
-                </label>
-                <label>Jour
-                  <select id="planningArretDay">
-                    <option value="ALL">Tous les jours</option>
-                    <option value="0">Lundi</option>
-                    <option value="1">Mardi</option>
-                    <option value="2">Mercredi</option>
-                    <option value="3">Jeudi</option>
-                    <option value="4">Vendredi</option>
-                    <option value="5">Samedi</option>
-                  </select>
-                </label>
-                <label>Début
-                  <input type="time" id="planningArretStart" />
-                </label>
-                <label>Durée (min)
-                  <input type="number" id="planningArretDuration" min="0" />
-                </label>
-                <label>Commentaire
-                  <input type="text" id="planningArretComment" />
-                </label>
-              </div>
-              <button class="secondary-btn" id="planningArretAddBtn">Ajouter l'arrêt</button>
-            </details>
-
-            <details open>
-              <summary>Cadences articles</summary>
-              <div class="form-grid">
-                <label>Code article
-                  <input type="text" id="planningArticleCode" />
-                </label>
-                <label>Libellé
-                  <input type="text" id="planningArticleLabel" />
-                </label>
-                <label>Poids colis (kg)
-                  <input type="number" id="planningArticlePoids" step="0.01" min="0" />
-                </label>
-                <label>Cadence (colis/h)
-                  <input type="number" id="planningArticleCadence" step="0.01" min="0" />
-                </label>
-                <label>Ligne par défaut
-                  <select id="planningArticleLine"></select>
-                </label>
-              </div>
-              <button class="secondary-btn" id="planningArticleAddBtn">Enregistrer la cadence</button>
-              <div class="planning-mini-table" id="planningCadenceList"></div>
-            </details>
-
-            <details open>
-              <summary>Ordres de fabrication (OF)</summary>
-              <div class="form-grid">
-                <label>Code article
-                  <input type="text" id="planningOFCode" list="planningArticleCodesList" />
-                  <datalist id="planningArticleCodesList"></datalist>
-                </label>
-                <label>Ligne
-                  <select id="planningOFLine"></select>
-                </label>
-                <label>Quantité (colis)
-                  <input type="number" id="planningOFQty" min="0" />
-                </label>
-                <label>Début (jour + heure)
-                  <div class="planning-inline">
-                    <select id="planningOFDay">
-                      <option value="0">Lundi</option>
-                      <option value="1">Mardi</option>
-                      <option value="2">Mercredi</option>
-                      <option value="3">Jeudi</option>
-                      <option value="4">Vendredi</option>
-                      <option value="5">Samedi</option>
-                    </select>
-                    <input type="time" id="planningOFStart" />
-                  </div>
-                </label>
-                <label>Cadence (colis/h)
-                  <input type="number" id="planningOFcadence" step="0.01" min="0" placeholder="auto" />
-                </label>
-              </div>
-              <button class="primary-btn" id="planningOFAddBtn">Ajouter l'OF</button>
-              <p class="helper-text" id="planningOFPrereq">Enregistre d'abord les cadences articles pour activer la création d'OF.</p>
-              <p class="helper-text">Pas de chevauchement sur une même ligne : recalage automatique.</p>
-            </details>
+          <h3>Cadre du planning</h3>
+          <div class="planning-inline-fields">
+            <label>Semaine
+              <input type="number" id="planningWeekNumber" min="1" max="53" />
+            </label>
+            <label>Lundi de référence
+              <input type="date" id="planningWeekStart" />
+            </label>
+            <button class="secondary-btn" id="planningRebuildBtn">🔄 Recalage auto</button>
           </div>
+          <p class="helper-text">Un code article doit être enregistré avant de pouvoir créer un OF.</p>
         </div>
 
         <div class="card">
-          <h3>Construction planning (Gantt)</h3>
+          <h3>Création planning</h3>
+          <div class="form-grid">
+            <label>Code article
+              <input type="text" id="planningOFCode" list="planningArticleCodesList" />
+              <datalist id="planningArticleCodesList"></datalist>
+            </label>
+            <label>Ligne
+              <select id="planningOFLine"></select>
+            </label>
+            <label>Quantité (colis)
+              <input type="number" id="planningOFQty" min="0" />
+            </label>
+            <label>Début (jour + heure)
+              <div class="planning-inline">
+                <select id="planningOFDay">
+                  <option value="0">Lundi</option>
+                  <option value="1">Mardi</option>
+                  <option value="2">Mercredi</option>
+                  <option value="3">Jeudi</option>
+                  <option value="4">Vendredi</option>
+                  <option value="5">Samedi</option>
+                </select>
+                <input type="time" id="planningOFStart" />
+              </div>
+            </label>
+            <label>Cadence (colis/h)
+              <input type="number" id="planningOFcadence" step="0.01" min="0" placeholder="auto" />
+            </label>
+          </div>
+          <div class="buttons-row planning-build-actions">
+            <button class="secondary-btn" id="planningOpenStopPopover">Ajouter arrêts</button>
+            <button class="primary-btn" id="planningOFAddBtn">Ajouter l'OF</button>
+          </div>
+          <p class="helper-text" id="planningOFPrereq">Enregistre d'abord les cadences articles pour activer la création d'OF.</p>
+          <div class="planning-validate-row">
+            <div class="planning-validate-left">
+              <label>Charger un planning validé
+                <select id="planningEditSelect"></select>
+              </label>
+              <button class="secondary-btn" id="planningEditLoadBtn">Charger pour édition</button>
+            </div>
+            <button class="primary-btn" id="planningValidateBtn">✅ Valider le planning</button>
+          </div>
+          <div id="planningSavedList" class="planning-mini-table"></div>
+        </div>
+      </div>
+
+      <div id="planning-tab-run" class="planning-pane hidden">
+        <div class="card">
+          <h3>Planning</h3>
+          <div class="form-grid">
+            <label>Planning validé
+              <select id="planningLaunchSelect"></select>
+            </label>
+          </div>
+          <div class="buttons-row">
+            <button class="primary-btn" id="planningLaunchBtn">Lancer le planning</button>
+          </div>
+        </div>
+
+        <div class="card planning-view-card">
           <div class="planning-legend">
             <span class="legend-item"><span class="legend-dot planned"></span>Non démarré</span>
             <span class="legend-item"><span class="legend-dot running"></span>En production</span>
@@ -765,23 +756,55 @@
         </div>
 
         <div class="card">
-          <h3>Lancer un planning validé</h3>
+          <h3>Avance / Retard lignes</h3>
+          <div id="planningDelays" class="planning-delays"></div>
+        </div>
+      </div>
+
+      <div id="planningStopPopover" class="popover hidden">
+        <div class="popover-content">
+          <div class="popover-header">
+            <h4>Ajouter des arrêts prévus</h4>
+            <button class="icon-btn" id="planningStopCloseBtn" aria-label="Fermer">✖</button>
+          </div>
           <div class="form-grid">
-            <label>Semaine à lancer
-              <input type="number" id="planningLaunchWeek" min="1" max="53" />
+            <label>Type
+              <select id="planningArretType">
+                <option value="Pause">Pause</option>
+                <option value="Maintenance">Maintenance</option>
+                <option value="Réunion">Réunion</option>
+                <option value="Autre">Autre</option>
+              </select>
+            </label>
+            <label>Ligne
+              <select id="planningArretLine">
+                <option value="ALL">Toutes les lignes</option>
+              </select>
+            </label>
+            <label>Jour
+              <select id="planningArretDay">
+                <option value="ALL">Tous les jours</option>
+                <option value="0">Lundi</option>
+                <option value="1">Mardi</option>
+                <option value="2">Mercredi</option>
+                <option value="3">Jeudi</option>
+                <option value="4">Vendredi</option>
+                <option value="5">Samedi</option>
+              </select>
+            </label>
+            <label>Début
+              <input type="time" id="planningArretStart" />
+            </label>
+            <label>Durée (min)
+              <input type="number" id="planningArretDuration" min="0" />
+            </label>
+            <label>Commentaire
+              <input type="text" id="planningArretComment" />
             </label>
           </div>
           <div class="buttons-row">
-            <button class="primary-btn" id="planningLaunchBtn">Lancer le planning</button>
+            <button class="secondary-btn" id="planningStopSaveBtn">Ajouter l'arrêt</button>
           </div>
-          <div class="table-wrapper" style="margin-top: 10px;">
-            <div id="planningSavedList" class="planning-mini-table"></div>
-          </div>
-        </div>
-
-        <div class="card">
-          <h3>Avance / Retard lignes</h3>
-          <div id="planningDelays" class="planning-delays"></div>
         </div>
       </div>
 
@@ -800,7 +823,7 @@
             </label>
             <label>Status
               <select id="planningEditStatus">
-                <option value="planned">Non démarré</option>
+                <option value="planned">Non dmarré</option>
                 <option value="running">En production</option>
                 <option value="done">Terminé</option>
                 <option value="blocked">Bloqué</option>
@@ -817,6 +840,7 @@
         </div>
       </div>
     </section>
+
 
     <!-- PANNEAU PARAMÈTRES -->
     <div id="settingsPanel" class="settings-panel hidden">

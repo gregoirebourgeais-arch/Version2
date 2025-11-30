@@ -3906,37 +3906,78 @@ function computeOrderDurationMinutes(order) {
   return (qty / cad) * 60;
 }
 
-function recalibrateLine(line) {
-  const orders = state.planning.orders.filter(o => o.line === line);
-  const stops = getAllStopsForLine(line);
-  const events = [...orders.map(o => ({ ...o, kind: "of" })), ...stops.map(s => ({ ...s, kind: "stop" }))]
+function splitOrderWithStops(order, startDate, baseEnd, stops) {
+  const relevant = (stops || [])
+    .filter(s => new Date(s.end) > startDate && new Date(s.start) < baseEnd)
     .sort((a, b) => new Date(a.start) - new Date(b.start));
 
-  let cursor = null;
-  events.forEach(ev => {
-    const start = new Date(ev.start);
-    const end = new Date(ev.end);
+  const segments = [];
+  let cursor = new Date(startDate);
+  let extensionMs = 0;
 
-    if (ev.kind === "stop") {
-      cursor = cursor && cursor > end ? cursor : end;
-      return;
+  relevant.forEach(stop => {
+    const ss = new Date(stop.start);
+    const se = new Date(stop.end);
+    if (se <= cursor) return;
+
+    if (ss > cursor) {
+      segments.push({
+        id: order.id,
+        parentId: order.id,
+        code: order.code,
+        label: order.label,
+        line: order.line,
+        quantity: order.quantity,
+        status: order.status,
+        blockedReason: order.blockedReason,
+        start: cursor.toISOString(),
+        end: ss.toISOString(),
+      });
     }
 
-    let finalStart = start;
-    if (cursor && start < cursor) {
-      finalStart = new Date(cursor);
-    }
-    const duration = computeOrderDurationMinutes(ev);
-    const finalEnd = new Date(finalStart.getTime() + duration * 60000);
-
-    ev.start = finalStart.toISOString();
-    ev.end = finalEnd.toISOString();
-    cursor = finalEnd;
+    extensionMs += Math.max(0, se - ss);
+    cursor = new Date(Math.max(cursor.getTime(), se.getTime()));
   });
 
-  events.filter(e => e.kind === "of").forEach(e => {
-    const idx = state.planning.orders.findIndex(o => o.id === e.id);
-    if (idx >= 0) state.planning.orders[idx] = { ...state.planning.orders[idx], start: e.start, end: e.end };
+  const finalEnd = new Date(baseEnd.getTime() + extensionMs);
+  if (!segments.length || cursor < finalEnd) {
+    segments.push({
+      id: order.id,
+      parentId: order.id,
+      code: order.code,
+      label: order.label,
+      line: order.line,
+      quantity: order.quantity,
+      status: order.status,
+      blockedReason: order.blockedReason,
+      start: cursor.toISOString(),
+      end: finalEnd.toISOString(),
+    });
+  }
+
+  return { segments, finalEnd };
+}
+
+function recalibrateLine(line) {
+  const orders = state.planning.orders.filter(o => o.line === line);
+  const stops = getAllStopsForLine(line).sort((a, b) => new Date(a.start) - new Date(b.start));
+  const sortedOrders = orders.sort((a, b) => new Date(a.start) - new Date(b.start));
+
+  let cursor = null;
+  sortedOrders.forEach(order => {
+    let start = new Date(order.start);
+    if (cursor && start < cursor) start = new Date(cursor);
+    const overlappingStop = stops.find(s => new Date(s.start) <= start && start < new Date(s.end));
+    if (overlappingStop) start = new Date(overlappingStop.end);
+
+    const duration = computeOrderDurationMinutes(order);
+    const baseEnd = new Date(start.getTime() + duration * 60000);
+    const { segments, finalEnd } = splitOrderWithStops(order, start, baseEnd, stops);
+
+    order.start = start.toISOString();
+    order.end = finalEnd.toISOString();
+    order.segments = segments;
+    cursor = finalEnd;
   });
 }
 
@@ -4064,7 +4105,9 @@ function addPlanningStop() {
     });
   });
   saveState();
+  LINES.forEach(recalibrateLine);
   refreshPlanningGantt();
+  closePlanningStopPopover();
 }
 
 function addPlanningOF() {
@@ -4179,12 +4222,30 @@ function refreshPlanningGantt() {
       timeline.appendChild(split);
     }
 
-    const stops = getAllStopsForLine(line);
+    const stops = getAllStopsForLine(line).map(s => ({ ...s, kind: "stop" }));
     const orders = state.planning.orders.filter(o => o.line === line);
-    const events = [
-      ...orders.map(o => ({ ...o, kind: "of" })),
-      ...stops.map(s => ({ ...s, kind: "stop" })),
-    ];
+    const orderSegments = [];
+
+    orders.forEach(o => {
+      const segs = (o.segments && o.segments.length)
+        ? o.segments
+        : [{ ...o, start: o.start, end: o.end }];
+      segs.forEach((seg, idx) => {
+        orderSegments.push({
+          ...seg,
+          kind: "of",
+          parentId: o.id,
+          segmentIndex: idx,
+          status: seg.status || o.status || "planned",
+          blockedReason: seg.blockedReason || o.blockedReason,
+          code: seg.code || o.code,
+          label: seg.label || o.label,
+          quantity: seg.quantity || o.quantity,
+        });
+      });
+    });
+
+    const events = [...orderSegments, ...stops];
 
     events.forEach(ev => {
       const s = new Date(ev.start);
@@ -4213,7 +4274,9 @@ function refreshPlanningGantt() {
 
       const title = document.createElement("div");
       title.className = "title";
-      title.textContent = ev.kind === "stop" ? ev.type : [ev.code || "OF", ev.label].filter(Boolean).join(" — ");
+      title.textContent = ev.kind === "stop"
+        ? ev.type
+        : [ev.code || "OF", ev.label].filter(Boolean).join(" — ");
 
       const meta = document.createElement("div");
       meta.className = "meta";
@@ -4310,6 +4373,27 @@ function handlePlanningDrop(e) {
   refreshPlanningGantt();
 }
 
+function setPlanningTab(tab) {
+  const panes = document.querySelectorAll("#section-planning .planning-pane");
+  const tabs = document.querySelectorAll("#section-planning .planning-tab-btn");
+  tabs.forEach(btn => btn.classList.toggle("active", btn.dataset.tab === tab));
+  panes.forEach(pane => pane.classList.toggle("hidden", pane.id !== `planning-tab-${tab}`));
+  if (tab === "run") {
+    refreshPlanningGantt();
+    refreshPlanningDelays();
+  }
+}
+
+function openPlanningStopPopover() {
+  const pop = document.getElementById("planningStopPopover");
+  if (pop) pop.classList.remove("hidden");
+}
+
+function closePlanningStopPopover() {
+  const pop = document.getElementById("planningStopPopover");
+  if (pop) pop.classList.add("hidden");
+}
+
 function openPlanningEditor(id) {
   const modal = document.getElementById("planningBlockEditor");
   const of = state.planning.orders.find(o => o.id === id);
@@ -4369,11 +4453,15 @@ function bindPlanning() {
   ensurePlanningDefaults();
   refreshPlanningLineSelectors();
   renderPlanningCadences();
-
   const weekNumberInput = document.getElementById("planningWeekNumber");
   const weekStartInput = document.getElementById("planningWeekStart");
   if (weekNumberInput) weekNumberInput.value = state.planning.weekNumber || "";
   if (weekStartInput) weekStartInput.value = state.planning.weekStart || formatDateInput(getMonday());
+
+  document.querySelectorAll("#section-planning .planning-tab-btn")?.forEach(btn => {
+    btn.addEventListener("click", () => setPlanningTab(btn.dataset.tab));
+  });
+  setPlanningTab("articles");
 
   weekNumberInput?.addEventListener("input", () => {
     state.planning.weekNumber = weekNumberInput.value;
@@ -4386,8 +4474,14 @@ function bindPlanning() {
   });
 
   document.getElementById("planningArticleAddBtn")?.addEventListener("click", addPlanningCadence);
-  document.getElementById("planningArretAddBtn")?.addEventListener("click", addPlanningStop);
+  document.getElementById("planningStopSaveBtn")?.addEventListener("click", addPlanningStop);
+  document.getElementById("planningOpenStopPopover")?.addEventListener("click", openPlanningStopPopover);
+  document.getElementById("planningStopCloseBtn")?.addEventListener("click", closePlanningStopPopover);
   document.getElementById("planningOFAddBtn")?.addEventListener("click", addPlanningOF);
+  const stopPopover = document.getElementById("planningStopPopover");
+  const stopContent = stopPopover?.querySelector(".popover-content");
+  stopPopover?.addEventListener("click", e => { if (e.target === stopPopover) closePlanningStopPopover(); });
+  stopContent?.addEventListener("click", e => e.stopPropagation());
 
   document.getElementById("planningRebuildBtn")?.addEventListener("click", () => {
     LINES.forEach(recalibrateLine);
@@ -4402,7 +4496,8 @@ function bindPlanning() {
   document.getElementById("planningShowDelaysBtn")?.addEventListener("click", refreshPlanningDelays);
 
   document.getElementById("planningValidateBtn")?.addEventListener("click", savePlanningSnapshot);
-  document.getElementById("planningLaunchBtn")?.addEventListener("click", launchPlanningSnapshot);
+  document.getElementById("planningLaunchBtn")?.addEventListener("click", () => launchPlanningSnapshot());
+  document.getElementById("planningEditLoadBtn")?.addEventListener("click", loadPlanningForEditing);
 
   bindPlanningEditor();
   refreshSavedPlanningList();
@@ -4433,20 +4528,38 @@ function savePlanningSnapshot() {
 
 function refreshSavedPlanningList() {
   const container = document.getElementById("planningSavedList");
-  if (!container) return;
+  const editSelect = document.getElementById("planningEditSelect");
+  const launchSelect = document.getElementById("planningLaunchSelect");
+  if (container) container.innerHTML = "";
+
   if (!state.planning.savedPlans.length) {
-    container.textContent = "Aucun planning validé pour l'instant.";
+    if (container) container.textContent = "Aucun planning validé pour l'instant.";
+    if (editSelect) editSelect.innerHTML = "<option value=\"\">Aucun planning</option>";
+    if (launchSelect) launchSelect.innerHTML = "<option value=\"\">Aucun planning</option>";
     return;
   }
-  const rows = state.planning.savedPlans
-    .sort((a, b) => (b.week || 0) - (a.week || 0))
-    .map(p => `<div class="helper-text">Semaine ${p.week} – validé le ${formatDateTime(p.savedAt)}</div>`)
+
+  const sorted = [...state.planning.savedPlans].sort((a, b) => (b.week || 0) - (a.week || 0));
+  if (container) {
+    const rows = sorted
+      .map(p => `<div class="helper-text">Semaine ${p.week} – validé le ${formatDateTime(p.savedAt)}</div>`)
+      .join("");
+    container.innerHTML = rows;
+  }
+
+  const options = sorted
+    .map(p => `<option value="${p.week}">Semaine ${p.week} (${formatDateInput(p.start || "") || ""})</option>`)
     .join("");
-  container.innerHTML = rows;
+  if (editSelect) editSelect.innerHTML = `<option value="">Choisir…</option>${options}`;
+  if (launchSelect) launchSelect.innerHTML = `<option value="">Choisir…</option>${options}`;
 }
 
-function launchPlanningSnapshot() {
-  const targetWeek = document.getElementById("planningLaunchWeek")?.value || state.planning.weekNumber;
+function loadPlanningForEditing() {
+  const targetWeek = document.getElementById("planningEditSelect")?.value || "";
+  if (!targetWeek) {
+    alert("Sélectionne un planning validé à charger.");
+    return;
+  }
   const snap = state.planning.savedPlans.find(p => `${p.week}` === `${targetWeek}`);
   if (!snap) return;
   state.planning.weekNumber = snap.week;
@@ -4454,10 +4567,41 @@ function launchPlanningSnapshot() {
   state.planning.orders = JSON.parse(JSON.stringify(snap.orders || []));
   state.planning.arretsPlanifies = JSON.parse(JSON.stringify(snap.arretsPlanifies || []));
   saveState();
+  const weekNumberInput = document.getElementById("planningWeekNumber");
+  const weekStartInput = document.getElementById("planningWeekStart");
+  if (weekNumberInput) weekNumberInput.value = state.planning.weekNumber;
+  if (weekStartInput) weekStartInput.value = state.planning.weekStart;
   renderPlanningCadences();
   updatePlanningOFPrereq();
+  LINES.forEach(recalibrateLine);
   refreshPlanningGantt();
   refreshPlanningDelays();
+  setPlanningTab("build");
+}
+
+function launchPlanningSnapshot(targetWeekOverride) {
+  const targetWeek = targetWeekOverride || document.getElementById("planningLaunchSelect")?.value || state.planning.weekNumber;
+  if (!targetWeek) {
+    alert("Choisis un planning validé dans la liste.");
+    return;
+  }
+  const snap = state.planning.savedPlans.find(p => `${p.week}` === `${targetWeek}`);
+  if (!snap) return;
+  state.planning.weekNumber = snap.week;
+  state.planning.weekStart = snap.start;
+  state.planning.orders = JSON.parse(JSON.stringify(snap.orders || []));
+  state.planning.arretsPlanifies = JSON.parse(JSON.stringify(snap.arretsPlanifies || []));
+  saveState();
+  const weekNumberInput = document.getElementById("planningWeekNumber");
+  const weekStartInput = document.getElementById("planningWeekStart");
+  if (weekNumberInput) weekNumberInput.value = state.planning.weekNumber;
+  if (weekStartInput) weekStartInput.value = state.planning.weekStart;
+  renderPlanningCadences();
+  updatePlanningOFPrereq();
+  LINES.forEach(recalibrateLine);
+  refreshPlanningGantt();
+  refreshPlanningDelays();
+  setPlanningTab("run");
 }
 
 function refreshPlanningDelays() {
