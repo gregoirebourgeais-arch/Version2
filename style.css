@@ -1658,7 +1658,7 @@ body.is-landscape {
 .popover {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: #000;
   display: flex;
   align-items: center;
   justify-content: center;

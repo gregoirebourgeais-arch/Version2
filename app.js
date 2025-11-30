@@ -4142,6 +4142,7 @@ function addPlanningCadence() {
   saveState();
   renderPlanningCadences();
   updatePlanningOFPrereq();
+  resetPlanningArticleForm();
 }
 
 function addPlanningStop() {
@@ -4233,6 +4234,37 @@ function addPlanningOF() {
   recalibrateLine(line);
   saveState();
   refreshPlanningGantt();
+  resetPlanningOFForm();
+}
+
+function resetPlanningArticleForm() {
+  const ids = [
+    "planningArticleCode",
+    "planningArticleLabel",
+    "planningArticlePoids",
+    "planningArticleCadence",
+  ];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  const line = document.getElementById("planningArticleLine");
+  if (line) line.value = line.querySelector("option")?.value || LINES[0] || "";
+}
+
+function resetPlanningOFForm() {
+  const code = document.getElementById("planningOFCode");
+  const qty = document.getElementById("planningOFQty");
+  const start = document.getElementById("planningOFStart");
+  const day = document.getElementById("planningOFDay");
+  const cad = document.getElementById("planningOFcadence");
+  if (code) code.value = "";
+  if (qty) qty.value = "";
+  if (start) start.value = "";
+  if (cad) cad.value = "";
+  if (day) day.value = "0";
+  const line = document.getElementById("planningOFLine");
+  if (line) line.value = line.querySelector("option")?.value || LINES[0] || "";
 }
 
 function refreshPlanningGantt() {
@@ -4633,6 +4665,13 @@ function savePlanningSnapshot() {
   const launchSelect = document.getElementById("planningLaunchSelect");
   if (editSelect) editSelect.value = `${week}`;
   if (launchSelect) launchSelect.value = `${week}`;
+
+  state.planning.orders = [];
+  state.planning.arretsPlanifies = [];
+  LINES.forEach(recalibrateLine);
+  saveState();
+  refreshPlanningGantt();
+  refreshPlanningDelays();
 }
 
 function refreshSavedPlanningList() {
