@@ -18,6 +18,7 @@ const LINES = [
 // Stockage version
 const STORAGE_KEY = "atelier_ppnc_state_v2";
 const ARCHIVES_KEY = "atelier_ppnc_archives_v2";
+const PLANNING_SNAPSHOTS_KEY = "planning_snapshots_v1";
 
 let archives = []; // [{ id, label, savedAt, equipe, week, quantieme, state }]
 let historyFiles = []; // Fichiers Excel présents dans honor200/Documents
@@ -320,6 +321,28 @@ function saveState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
     console.error("saveState error", e);
+  }
+}
+
+function loadPlanningSnapshots() {
+  try {
+    const raw = localStorage.getItem(PLANNING_SNAPSHOTS_KEY);
+    const snaps = raw ? JSON.parse(raw) : [];
+    if (!state.planning) state.planning = { savedPlans: [] };
+    state.planning.savedPlans = snaps || [];
+  } catch (e) {
+    console.error("loadPlanningSnapshots error", e);
+    if (!state.planning) state.planning = { savedPlans: [] };
+    state.planning.savedPlans = state.planning.savedPlans || [];
+  }
+}
+
+function savePlanningSnapshots() {
+  try {
+    const snaps = state?.planning?.savedPlans || [];
+    localStorage.setItem(PLANNING_SNAPSHOTS_KEY, JSON.stringify(snaps));
+  } catch (e) {
+    console.error("savePlanningSnapshots error", e);
   }
 }
 
@@ -4272,6 +4295,13 @@ function refreshPlanningGantt() {
   renderPlanningGantt("planningPreview", { interactive: false });
 }
 
+function resetPlanningPreview() {
+  const preview = document.getElementById("planningPreview");
+  if (preview) {
+    preview.innerHTML = "<p class=\"helper-text\">Aucune prévisualisation en attente. Ajoute des OF pour voir l'aperçu.</p>";
+  }
+}
+
 function renderPlanningGantt(targetId, { interactive = true } = {}) {
   const gantt = document.getElementById(targetId);
   if (!gantt) return;
@@ -4661,6 +4691,7 @@ function savePlanningSnapshot() {
   state.planning.weekNumber = week;
   state.planning.weekStart = start;
   saveState();
+  savePlanningSnapshots();
   refreshSavedPlanningList();
   const editSelect = document.getElementById("planningEditSelect");
   const launchSelect = document.getElementById("planningLaunchSelect");
@@ -4669,8 +4700,8 @@ function savePlanningSnapshot() {
 
   state.planning.orders = [];
   state.planning.arretsPlanifies = [];
-  const preview = document.getElementById("planningPreview");
-  if (preview) preview.innerHTML = "<p class=\"helper-text\">Aucune prévisualisation en attente. Ajoute des OF pour voir l'aperçu.</p>";
+  resetPlanningOFForm();
+  resetPlanningPreview();
   LINES.forEach(recalibrateLine);
   saveState();
   refreshPlanningGantt();
@@ -4823,6 +4854,7 @@ function updateOrientationLayout() {
 document.addEventListener("DOMContentLoaded", async () => {
   await ensureDefaultManagerPassword();
   loadState();
+  loadPlanningSnapshots();
   loadArchives();
   initHeaderDate();
   initEquipeSelector();
