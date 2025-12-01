@@ -329,7 +329,18 @@ function loadPlanningSnapshots() {
     const raw = localStorage.getItem(PLANNING_SNAPSHOTS_KEY);
     const snaps = raw ? JSON.parse(raw) : [];
     if (!state.planning) state.planning = { savedPlans: [] };
-    state.planning.savedPlans = snaps || [];
+
+    // Fusionne avec d'éventuelles sauvegardes stockées dans l'état principal
+    // (anciennes versions) afin de ne jamais perdre un planning validé.
+    const legacy = state.planning.savedPlans || [];
+    const merged = [...legacy];
+    snaps.forEach(s => {
+      const exists = merged.some(m => `${m.week}` === `${s.week}`);
+      if (!exists) merged.push(s);
+    });
+
+    state.planning.savedPlans = merged;
+    savePlanningSnapshots();
   } catch (e) {
     console.error("loadPlanningSnapshots error", e);
     if (!state.planning) state.planning = { savedPlans: [] };
@@ -4307,6 +4318,12 @@ function renderPlanningGantt(targetId, { interactive = true } = {}) {
   if (!gantt) return;
   const start = getPlanningWeekStartDate();
   const end = getPlanningWeekEndDate();
+
+  const hasOrders = (state.planning.orders || []).length > 0;
+  if (!interactive && !hasOrders) {
+    resetPlanningPreview();
+    return;
+  }
 
   gantt.innerHTML = "";
 
