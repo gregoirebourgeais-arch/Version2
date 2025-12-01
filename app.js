@@ -79,6 +79,8 @@ let state = {
     cadences: [],
     savedPlans: [],
     selectedPlanWeek: "",
+    activeOrders: [],
+    activeArrets: [],
   },
 };
 
@@ -310,6 +312,8 @@ function loadState() {
     if (!state.planning.arretsPlanifies) state.planning.arretsPlanifies = [];
     if (!state.planning.cadences) state.planning.cadences = [];
     if (!state.planning.savedPlans) state.planning.savedPlans = [];
+    if (!state.planning.activeOrders) state.planning.activeOrders = [];
+    if (!state.planning.activeArrets) state.planning.activeArrets = [];
 
   } catch (e) {
     console.error("loadState error", e);
@@ -4008,9 +4012,10 @@ function splitOrderWithStops(order, startDate, baseEnd, stops) {
   return { segments, finalEnd };
 }
 
-function recalibrateLine(line) {
-  const orders = state.planning.orders.filter(o => o.line === line);
-  const stops = getAllStopsForLine(line).sort((a, b) => new Date(a.start) - new Date(b.start));
+function recalibrateLine(line, dataset = {}) {
+  const orders = (dataset.orders || state.planning.orders || []).filter(o => o.line === line);
+  const plannedStops = dataset.plannedStops || state.planning.arretsPlanifies || [];
+  const stops = getAllStopsForLine(line, plannedStops).sort((a, b) => new Date(a.start) - new Date(b.start));
   const sortedOrders = orders.sort((a, b) => new Date(a.start) - new Date(b.start));
 
   let cursor = null;
@@ -4031,11 +4036,11 @@ function recalibrateLine(line) {
   });
 }
 
-function getAllStopsForLine(line) {
+function getAllStopsForLine(line, plannedStops = state.planning.arretsPlanifies || []) {
   const startWeek = getPlanningWeekStartDate();
   const endWeek = getPlanningWeekEndDate();
 
-  const plannedStops = (state.planning.arretsPlanifies || [])
+  const plannedStopsForLine = (plannedStops || [])
     .filter(a => a.line === line)
     .map(a => ({
       ...a,
@@ -4059,7 +4064,7 @@ function getAllStopsForLine(line) {
     }))
     .filter(s => new Date(s.start) >= startWeek && new Date(s.start) <= endWeek);
 
-  return [...plannedStops, ...recStops];
+  return [...plannedStopsForLine, ...recStops];
 }
 
 function renderPlanningCadences() {
@@ -4331,11 +4336,22 @@ function renderPlanningGantt(targetId, { interactive = true } = {}) {
   const start = getPlanningWeekStartDate();
   const end = getPlanningWeekEndDate();
 
-  const hasOrders = (state.planning.orders || []).length > 0;
+  const isRunView = targetId === "planningGantt";
+  const orders = isRunView ? (state.planning.activeOrders || []) : (state.planning.orders || []);
+  const plannedStops = isRunView ? (state.planning.activeArrets || []) : (state.planning.arretsPlanifies || []);
+
+  const hasOrders = orders.length > 0;
   if (!interactive && !hasOrders) {
     resetPlanningPreview();
     return;
   }
+  if (interactive && !hasOrders) {
+    gantt.innerHTML = "<p class=\"helper-text\">Aucun planning validé n'est lancé. Sélectionne une semaine et clique sur Lancer.</p>";
+    return;
+  }
+
+  // recalage à la volée pour le jeu de données rendu
+  LINES.forEach(line => recalibrateLine(line, { orders, plannedStops }));
 
   gantt.innerHTML = "";
 
@@ -4399,11 +4415,11 @@ function renderPlanningGantt(targetId, { interactive = true } = {}) {
       timeline.appendChild(split);
     }
 
-    const stops = getAllStopsForLine(line).map(s => ({ ...s, kind: "stop" }));
-    const orders = state.planning.orders.filter(o => o.line === line);
+    const stops = getAllStopsForLine(line, plannedStops).map(s => ({ ...s, kind: "stop" }));
+    const ordersForLine = orders.filter(o => o.line === line);
     const orderSegments = [];
 
-    orders.forEach(o => {
+    ordersForLine.forEach(o => {
       const segs = (o.segments && o.segments.length)
         ? o.segments
         : [{ ...o, start: o.start, end: o.end }];
@@ -4506,7 +4522,7 @@ function formatPlanningDay(dateLike) {
 }
 
 function updatePlanningStatusFromProduction(line, rec) {
-  if (!state.planning || !state.planning.orders?.length) return;
+  if (!state.planning || !state.planning.activeOrders?.length) return;
   const baseDate = rec.dateTime ? new Date(rec.dateTime) : new Date();
   const makeDate = (t) => {
     if (!t) return null;
@@ -4518,7 +4534,7 @@ function updatePlanningStatusFromProduction(line, rec) {
   const startD = makeDate(rec.start);
   const endD = makeDate(rec.end);
 
-  const orders = state.planning.orders.filter(o => o.line === line);
+  const orders = state.planning.activeOrders.filter(o => o.line === line);
   const matchStart = orders.find(o => startD && new Date(o.start) <= startD && startD <= new Date(o.end));
   const matchEnd = orders.find(o => endD && new Date(o.start) <= endD && endD <= new Date(o.end));
   if (matchStart) {
@@ -4541,13 +4557,13 @@ function handlePlanningDrop(e) {
   const minutes = Math.max(0, Math.min(WEEK_TOTAL_MINUTES, ratio * WEEK_TOTAL_MINUTES));
   const startDate = new Date(getPlanningWeekStartDate().getTime() + minutes * 60000);
 
-  const order = state.planning.orders.find(o => o.id === id);
+  const order = (state.planning.activeOrders || []).find(o => o.id === id);
   if (!order) return;
   order.line = line;
   order.start = startDate.toISOString();
   const duration = computeOrderDurationMinutes(order);
   order.end = new Date(startDate.getTime() + duration * 60000).toISOString();
-  recalibrateLine(line);
+  recalibrateLine(line, { orders: state.planning.activeOrders, plannedStops: state.planning.activeArrets });
   saveState();
   refreshPlanningGantt();
 }
@@ -4575,7 +4591,7 @@ function closePlanningStopPopover() {
 
 function openPlanningEditor(id) {
   const modal = document.getElementById("planningBlockEditor");
-  const of = state.planning.orders.find(o => o.id === id);
+  const of = (state.planning.activeOrders || []).find(o => o.id === id);
   if (!modal || !of) return;
   planningEditId = id;
   document.getElementById("planningEditQty").value = of.quantity || 0;
@@ -4606,7 +4622,7 @@ function bindPlanningEditor() {
   cancelBtn?.addEventListener("click", closePlanningEditor);
   saveBtn?.addEventListener("click", () => {
     if (!planningEditId) return;
-    const of = state.planning.orders.find(o => o.id === planningEditId);
+    const of = (state.planning.activeOrders || []).find(o => o.id === planningEditId);
     if (!of) return;
     of.quantity = Number(document.getElementById("planningEditQty")?.value) || of.quantity;
     const newStart = document.getElementById("planningEditStart")?.value;
@@ -4615,7 +4631,7 @@ function bindPlanningEditor() {
     if (newEnd) of.end = new Date(newEnd).toISOString();
     of.status = document.getElementById("planningEditStatus")?.value || of.status;
     of.blockedReason = document.getElementById("planningEditBlockReason")?.value || "";
-    recalibrateLine(of.line);
+    recalibrateLine(of.line, { orders: state.planning.activeOrders, plannedStops: state.planning.activeArrets });
     saveState();
     refreshPlanningGantt();
     closePlanningEditor();
@@ -4727,7 +4743,7 @@ function savePlanningSnapshot() {
   state.planning.weekStart = start;
   savePlanningSnapshots(merged);
   saveState();
-  refreshSavedPlanningList(false);
+  refreshSavedPlanningList(true);
   const editSelect = document.getElementById("planningEditSelect");
   const launchSelect = document.getElementById("planningLaunchSelect");
   if (editSelect) editSelect.value = `${week}`;
@@ -4814,8 +4830,8 @@ function launchPlanningSnapshot(targetWeekOverride) {
   if (!snap) return;
   state.planning.weekNumber = snap.week;
   state.planning.weekStart = snap.start;
-  state.planning.orders = JSON.parse(JSON.stringify(snap.orders || []));
-  state.planning.arretsPlanifies = JSON.parse(JSON.stringify(snap.arretsPlanifies || []));
+  state.planning.activeOrders = JSON.parse(JSON.stringify(snap.orders || []));
+  state.planning.activeArrets = JSON.parse(JSON.stringify(snap.arretsPlanifies || []));
   saveState();
   const weekNumberInput = document.getElementById("planningWeekNumber");
   const weekStartInput = document.getElementById("planningWeekStart");
@@ -4823,7 +4839,7 @@ function launchPlanningSnapshot(targetWeekOverride) {
   if (weekStartInput) weekStartInput.value = state.planning.weekStart;
   renderPlanningCadences();
   updatePlanningOFPrereq();
-  LINES.forEach(recalibrateLine);
+  LINES.forEach(line => recalibrateLine(line, { orders: state.planning.activeOrders, plannedStops: state.planning.activeArrets }));
   refreshPlanningGantt();
   refreshPlanningDelays();
   setPlanningTab("run");
@@ -4837,8 +4853,14 @@ function refreshPlanningDelays() {
   const now = new Date();
   container.innerHTML = "";
 
+  const activeOrders = state.planning.activeOrders || [];
+  if (!activeOrders.length) {
+    container.innerHTML = "<p class=\"helper-text\">Lance un planning validé pour calculer l'avance/retard.</p>";
+    return;
+  }
+
   LINES.forEach(line => {
-    const orders = state.planning.orders.filter(o => o.line === line);
+    const orders = activeOrders.filter(o => o.line === line);
     let expectedQty = 0;
     let expectedWeight = 0;
     orders.forEach(of => {
