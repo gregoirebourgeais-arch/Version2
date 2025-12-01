@@ -20,6 +20,7 @@ const STORAGE_KEY = "atelier_ppnc_state_v2";
 const ARCHIVES_KEY = "atelier_ppnc_archives_v2";
 const PLANNING_SNAPSHOTS_KEY = "planning_snapshots_v1";
 let planningSnapshotCache = [];
+let planningSnapshots = [];
 
 let archives = []; // [{ id, label, savedAt, equipe, week, quantieme, state }]
 let historyFiles = []; // Fichiers Excel présents dans honor200/Documents
@@ -343,6 +344,7 @@ function readPlanningSnapshotsFromStorage() {
 
 function savePlanningSnapshots(snaps) {
   planningSnapshotCache = Array.isArray(snaps) ? [...snaps] : [];
+  planningSnapshots = Array.isArray(snaps) ? [...snaps] : [];
   try {
     localStorage.setItem(PLANNING_SNAPSHOTS_KEY, JSON.stringify(snaps || []));
   } catch (e) {
@@ -354,6 +356,14 @@ function getMergedPlanningSnapshots() {
   const stored = readPlanningSnapshotsFromStorage();
   const fromState = state?.planning?.savedPlans || [];
   const merged = [];
+
+  if (planningSnapshots.length) {
+    planningSnapshots.forEach(snap => {
+      if (!snap || !snap.week) return;
+      const exists = merged.some(m => `${m.week}` === `${snap.week}`);
+      if (!exists) merged.push(snap);
+    });
+  }
 
   [ ...(Array.isArray(stored) ? stored : []), ...(Array.isArray(fromState) ? fromState : []) ].forEach(snap => {
     if (!snap || !snap.week) return;
@@ -367,6 +377,7 @@ function getMergedPlanningSnapshots() {
 function loadPlanningSnapshots() {
   try {
     const merged = getMergedPlanningSnapshots();
+    planningSnapshots = [...merged];
     if (!state.planning) state.planning = { savedPlans: [] };
     state.planning.savedPlans = merged;
     savePlanningSnapshots(merged);
@@ -4760,6 +4771,7 @@ function savePlanningSnapshot() {
   if (existingIdx >= 0) merged[existingIdx] = snapshot;
   else merged.push(snapshot);
 
+  planningSnapshots = merged;
   state.planning.savedPlans = merged;
   state.planning.weekNumber = week;
   state.planning.weekStart = start;
@@ -4774,15 +4786,20 @@ function savePlanningSnapshot() {
   if (editSelect) editSelect.value = `${week}`;
   if (launchSelect) launchSelect.value = `${week}`;
 
-  state.planning.orders = [];
-  state.planning.arretsPlanifies = [];
-  resetPlanningOFForm();
-  resetPlanningPreview();
-  document.getElementById("planningPreview")?.classList.add("is-empty");
+  clearPlanningDraft();
   LINES.forEach(recalibrateLine);
   saveState();
   refreshPlanningGantt();
   refreshPlanningDelays();
+}
+
+function clearPlanningDraft() {
+  state.planning.orders = [];
+  state.planning.arretsPlanifies = [];
+  resetPlanningOFForm();
+  resetPlanningPreview();
+  const preview = document.getElementById("planningPreview");
+  if (preview) preview.classList.add("is-empty");
 }
 
 function refreshSavedPlanningList(forceReload = false) {
@@ -4794,6 +4811,7 @@ function refreshSavedPlanningList(forceReload = false) {
   // Recharge depuis le stockage et la mémoire à chaque rafraîchissement pour éviter les listes vides
   if (forceReload || !state.planning.savedPlans.length) {
     state.planning.savedPlans = getMergedPlanningSnapshots();
+    planningSnapshots = [...state.planning.savedPlans];
   }
 
   if (!state.planning.savedPlans.length) {
