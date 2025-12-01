@@ -19,6 +19,7 @@ const LINES = [
 const STORAGE_KEY = "atelier_ppnc_state_v2";
 const ARCHIVES_KEY = "atelier_ppnc_archives_v2";
 const PLANNING_SNAPSHOTS_KEY = "planning_snapshots_v1";
+let planningSnapshotCache = [];
 
 let archives = []; // [{ id, label, savedAt, equipe, week, quantieme, state }]
 let historyFiles = []; // Fichiers Excel présents dans honor200/Documents
@@ -327,14 +328,17 @@ function saveState() {
 function readPlanningSnapshotsFromStorage() {
   try {
     const raw = localStorage.getItem(PLANNING_SNAPSHOTS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed) && parsed.length) planningSnapshotCache = parsed;
+    return parsed.length ? parsed : planningSnapshotCache;
   } catch (e) {
     console.error("readPlanningSnapshotsFromStorage error", e);
-    return [];
+    return planningSnapshotCache;
   }
 }
 
 function savePlanningSnapshots(snaps) {
+  planningSnapshotCache = Array.isArray(snaps) ? [...snaps] : [];
   try {
     localStorage.setItem(PLANNING_SNAPSHOTS_KEY, JSON.stringify(snaps || []));
   } catch (e) {
@@ -4723,7 +4727,7 @@ function savePlanningSnapshot() {
   state.planning.weekStart = start;
   savePlanningSnapshots(merged);
   saveState();
-  refreshSavedPlanningList(true);
+  refreshSavedPlanningList(false);
   const editSelect = document.getElementById("planningEditSelect");
   const launchSelect = document.getElementById("planningLaunchSelect");
   if (editSelect) editSelect.value = `${week}`;
@@ -4748,7 +4752,9 @@ function refreshSavedPlanningList(forceReload = false) {
   // Recharge depuis le stockage si demandé ou si la liste semble vide
   if (forceReload || !state.planning.savedPlans.length) {
     const stored = readPlanningSnapshotsFromStorage();
-    state.planning.savedPlans = stored;
+    if (stored.length || !state.planning.savedPlans.length) {
+      state.planning.savedPlans = stored;
+    }
   }
 
   if (!state.planning.savedPlans.length) {
