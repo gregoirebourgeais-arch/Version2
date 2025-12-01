@@ -324,10 +324,27 @@ function saveState() {
   }
 }
 
-function loadPlanningSnapshots() {
+function readPlanningSnapshotsFromStorage() {
   try {
     const raw = localStorage.getItem(PLANNING_SNAPSHOTS_KEY);
-    const snaps = raw ? JSON.parse(raw) : [];
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    console.error("readPlanningSnapshotsFromStorage error", e);
+    return [];
+  }
+}
+
+function savePlanningSnapshots(snaps) {
+  try {
+    localStorage.setItem(PLANNING_SNAPSHOTS_KEY, JSON.stringify(snaps || []));
+  } catch (e) {
+    console.error("savePlanningSnapshots error", e);
+  }
+}
+
+function loadPlanningSnapshots() {
+  try {
+    const snaps = readPlanningSnapshotsFromStorage();
     if (!state.planning) state.planning = { savedPlans: [] };
 
     // Fusionne avec d'éventuelles sauvegardes stockées dans l'état principal
@@ -340,20 +357,11 @@ function loadPlanningSnapshots() {
     });
 
     state.planning.savedPlans = merged;
-    savePlanningSnapshots();
+    savePlanningSnapshots(merged);
   } catch (e) {
     console.error("loadPlanningSnapshots error", e);
     if (!state.planning) state.planning = { savedPlans: [] };
     state.planning.savedPlans = state.planning.savedPlans || [];
-  }
-}
-
-function savePlanningSnapshots() {
-  try {
-    const snaps = state?.planning?.savedPlans || [];
-    localStorage.setItem(PLANNING_SNAPSHOTS_KEY, JSON.stringify(snaps));
-  } catch (e) {
-    console.error("savePlanningSnapshots error", e);
   }
 }
 
@@ -4677,7 +4685,7 @@ function bindPlanning() {
   document.getElementById("planningEditLoadBtn")?.addEventListener("click", loadPlanningForEditing);
 
   bindPlanningEditor();
-  refreshSavedPlanningList();
+  refreshSavedPlanningList(true);
   refreshPlanningGantt();
   refreshPlanningDelays();
 }
@@ -4702,14 +4710,20 @@ function savePlanningSnapshot() {
     arretsPlanifies: JSON.parse(JSON.stringify(state.planning.arretsPlanifies || [])),
     cadences: JSON.parse(JSON.stringify(state.planning.cadences || [])),
   };
-  const existingIdx = state.planning.savedPlans.findIndex(p => p.week === week);
-  if (existingIdx >= 0) state.planning.savedPlans[existingIdx] = snapshot;
-  else state.planning.savedPlans.push(snapshot);
+
+  // Recharge le stockage pour éviter les divergences puis merge/écrase la semaine en cours
+  const stored = readPlanningSnapshotsFromStorage();
+  const merged = [...stored];
+  const existingIdx = merged.findIndex(p => `${p.week}` === `${week}`);
+  if (existingIdx >= 0) merged[existingIdx] = snapshot;
+  else merged.push(snapshot);
+
+  state.planning.savedPlans = merged;
   state.planning.weekNumber = week;
   state.planning.weekStart = start;
+  savePlanningSnapshots(merged);
   saveState();
-  savePlanningSnapshots();
-  refreshSavedPlanningList();
+  refreshSavedPlanningList(true);
   const editSelect = document.getElementById("planningEditSelect");
   const launchSelect = document.getElementById("planningLaunchSelect");
   if (editSelect) editSelect.value = `${week}`;
@@ -4725,11 +4739,17 @@ function savePlanningSnapshot() {
   refreshPlanningDelays();
 }
 
-function refreshSavedPlanningList() {
+function refreshSavedPlanningList(forceReload = false) {
   const container = document.getElementById("planningSavedList");
   const editSelect = document.getElementById("planningEditSelect");
   const launchSelect = document.getElementById("planningLaunchSelect");
   if (container) container.innerHTML = "";
+
+  // Recharge depuis le stockage si demandé ou si la liste semble vide
+  if (forceReload || !state.planning.savedPlans.length) {
+    const stored = readPlanningSnapshotsFromStorage();
+    state.planning.savedPlans = stored;
+  }
 
   if (!state.planning.savedPlans.length) {
     if (container) container.textContent = "Aucun planning validé pour l'instant.";
