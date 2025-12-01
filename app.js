@@ -350,20 +350,24 @@ function savePlanningSnapshots(snaps) {
   }
 }
 
+function getMergedPlanningSnapshots() {
+  const stored = readPlanningSnapshotsFromStorage();
+  const fromState = state?.planning?.savedPlans || [];
+  const merged = [];
+
+  [ ...(Array.isArray(stored) ? stored : []), ...(Array.isArray(fromState) ? fromState : []) ].forEach(snap => {
+    if (!snap || !snap.week) return;
+    const exists = merged.some(m => `${m.week}` === `${snap.week}`);
+    if (!exists) merged.push(snap);
+  });
+
+  return merged;
+}
+
 function loadPlanningSnapshots() {
   try {
-    const snaps = readPlanningSnapshotsFromStorage();
+    const merged = getMergedPlanningSnapshots();
     if (!state.planning) state.planning = { savedPlans: [] };
-
-    // Fusionne avec d'éventuelles sauvegardes stockées dans l'état principal
-    // (anciennes versions) afin de ne jamais perdre un planning validé.
-    const legacy = state.planning.savedPlans || [];
-    const merged = [...legacy];
-    snaps.forEach(s => {
-      const exists = merged.some(m => `${m.week}` === `${s.week}`);
-      if (!exists) merged.push(s);
-    });
-
     state.planning.savedPlans = merged;
     savePlanningSnapshots(merged);
   } catch (e) {
@@ -3899,6 +3903,12 @@ function formatDateInput(d) {
 
 function ensurePlanningDefaults() {
   if (!state.planning) return;
+  if (!Array.isArray(state.planning.savedPlans)) state.planning.savedPlans = [];
+  if (!Array.isArray(state.planning.orders)) state.planning.orders = [];
+  if (!Array.isArray(state.planning.arretsPlanifies)) state.planning.arretsPlanifies = [];
+  if (!Array.isArray(state.planning.activeOrders)) state.planning.activeOrders = [];
+  if (!Array.isArray(state.planning.activeArrets)) state.planning.activeArrets = [];
+  if (!state.planning.selectedPlanWeek) state.planning.selectedPlanWeek = "";
   if (!state.planning.weekStart) {
     const monday = getMonday();
     state.planning.weekStart = formatDateInput(monday);
@@ -4340,6 +4350,11 @@ function renderPlanningGantt(targetId, { interactive = true } = {}) {
   const orders = isRunView ? (state.planning.activeOrders || []) : (state.planning.orders || []);
   const plannedStops = isRunView ? (state.planning.activeArrets || []) : (state.planning.arretsPlanifies || []);
 
+  if (isRunView && !state.planning.selectedPlanWeek) {
+    gantt.innerHTML = "<p class=\"helper-text\">Choisis un planning validé puis clique sur Lancer pour l'afficher ici.</p>";
+    return;
+  }
+
   const hasOrders = orders.length > 0;
   if (!interactive && !hasOrders) {
     resetPlanningPreview();
@@ -4646,6 +4661,13 @@ function bindPlanningEditor() {
 
 function bindPlanning() {
   ensurePlanningDefaults();
+  const knownWeeks = (state.planning.savedPlans || []).map(p => `${p.week}`);
+  if (!knownWeeks.includes(`${state.planning.selectedPlanWeek || ""}`)) {
+    state.planning.selectedPlanWeek = "";
+    state.planning.activeOrders = [];
+    state.planning.activeArrets = [];
+    saveState();
+  }
   refreshPlanningLineSelectors();
   renderPlanningCadences();
   const weekNumberInput = document.getElementById("planningWeekNumber");
@@ -4732,7 +4754,7 @@ function savePlanningSnapshot() {
   };
 
   // Recharge le stockage pour éviter les divergences puis merge/écrase la semaine en cours
-  const stored = readPlanningSnapshotsFromStorage();
+  const stored = getMergedPlanningSnapshots();
   const merged = [...stored];
   const existingIdx = merged.findIndex(p => `${p.week}` === `${week}`);
   if (existingIdx >= 0) merged[existingIdx] = snapshot;
@@ -4741,6 +4763,9 @@ function savePlanningSnapshot() {
   state.planning.savedPlans = merged;
   state.planning.weekNumber = week;
   state.planning.weekStart = start;
+  state.planning.selectedPlanWeek = "";
+  state.planning.activeOrders = [];
+  state.planning.activeArrets = [];
   savePlanningSnapshots(merged);
   saveState();
   refreshSavedPlanningList(true);
@@ -4753,6 +4778,7 @@ function savePlanningSnapshot() {
   state.planning.arretsPlanifies = [];
   resetPlanningOFForm();
   resetPlanningPreview();
+  document.getElementById("planningPreview")?.classList.add("is-empty");
   LINES.forEach(recalibrateLine);
   saveState();
   refreshPlanningGantt();
@@ -4765,12 +4791,9 @@ function refreshSavedPlanningList(forceReload = false) {
   const launchSelect = document.getElementById("planningLaunchSelect");
   if (container) container.innerHTML = "";
 
-  // Recharge depuis le stockage si demandé ou si la liste semble vide
+  // Recharge depuis le stockage et la mémoire à chaque rafraîchissement pour éviter les listes vides
   if (forceReload || !state.planning.savedPlans.length) {
-    const stored = readPlanningSnapshotsFromStorage();
-    if (stored.length || !state.planning.savedPlans.length) {
-      state.planning.savedPlans = stored;
-    }
+    state.planning.savedPlans = getMergedPlanningSnapshots();
   }
 
   if (!state.planning.savedPlans.length) {
@@ -4792,7 +4815,12 @@ function refreshSavedPlanningList(forceReload = false) {
     .map(p => `<option value="${p.week}">Semaine ${p.week} (${formatDateInput(p.start || "") || ""})</option>`)
     .join("");
   if (editSelect) editSelect.innerHTML = `<option value="">Choisir…</option>${options}`;
-  if (launchSelect) launchSelect.innerHTML = `<option value="">Choisir…</option>${options}`;
+  if (launchSelect) {
+    launchSelect.innerHTML = `<option value="">Choisir…</option>${options}`;
+    if (state.planning.selectedPlanWeek) {
+      launchSelect.value = `${state.planning.selectedPlanWeek}`;
+    }
+  }
 }
 
 function loadPlanningForEditing() {
@@ -4830,6 +4858,7 @@ function launchPlanningSnapshot(targetWeekOverride) {
   if (!snap) return;
   state.planning.weekNumber = snap.week;
   state.planning.weekStart = snap.start;
+  state.planning.selectedPlanWeek = `${snap.week}`;
   state.planning.activeOrders = JSON.parse(JSON.stringify(snap.orders || []));
   state.planning.activeArrets = JSON.parse(JSON.stringify(snap.arretsPlanifies || []));
   saveState();
