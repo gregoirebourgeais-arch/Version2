@@ -45,7 +45,8 @@
     <div class="header-info" id="header-datetime">
       <!-- injecté JS -->
     </div>
-    <div style="display: flex; gap: 10px; align-items: center;">
+    <div class="header-actions">
+      <button id="settingsToggle" class="icon-btn" title="Paramètres et sécurité">⚙️</button>
       <select id="equipeSelector" class="equipe-selector">
         <option value="M">Équipe M</option>
         <option value="AM">Équipe AM</option>
@@ -65,6 +66,7 @@
     <button class="nav-btn" data-section="validation">Validation DDM</button>
     <button class="nav-btn" data-section="historique">Historique équipes</button>
     <button class="nav-btn" data-section="manager">Manager (base dédiée)</button>
+    <button class="nav-btn" data-section="planning">Planning</button>
   </nav>
 
   <main>
@@ -492,6 +494,7 @@
         <select id="historySelect">
           <option value="">-- Sélectionner --</option>
         </select>
+        <div id="historyFolderStatus" class="import-status helper-text"></div>
       </div>
 
       <div class="card">
@@ -530,6 +533,7 @@
               <th>Consigne</th>
               <th>Visa</th>
               <th>Validée</th>
+              <th>Supprimer</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -557,41 +561,38 @@
     <section id="section-manager" class="section">
       <h2>Base manager (indépendante & locale)</h2>
       <p class="helper-text">
-        Importe les fichiers Excel et stocke toutes les lignes dans une base IndexedDB locale (hors connexion, aucune
-        synchronisation). Recherche texte sur tous les champs ou seulement ceux cochés, tri multi-colonnes et exports.
+        Importe les fichiers Excel et recopie toutes les lignes dans un classeur unique généré par l'application. La
+        recherche parcourt l'intégralité de l'historique stocké dans ce classeur, sans dépendance réseau.
       </p>
 
-      <div class="manager-grid">
+      <div class="manager-grid" id="managerContent">
         <div class="card">
           <h3>Import vers la base manager</h3>
-          <p class="helper-text">
-            Les fichiers peuvent arriver à tout moment (jusqu'à plusieurs par équipe). Aucun prérequis de nombre ou de
-            plage horaire.
-          </p>
+          <div class="info-bubble">
+            <button type="button" class="icon-btn info-toggle" id="managerInfoToggle" title="Détails de la mise à jour">ℹ️ Détails</button>
+            <div class="info-bubble__content hidden" id="managerInfoContent">
+              Les fichiers peuvent arriver à tout moment (jusqu'à plusieurs par équipe). Clique sur « Mise à jour » pour
+              scanner un dossier (ex : honor200 ➜ Documents) et ne récupérer que les fichiers Excel non encore importés.
+              Une vérification automatique relance ce scan toutes les 30 minutes si le dossier est autorisé.
+            </div>
+          </div>
           <div class="import-actions">
             <input type="file" id="managerExcelInput" accept=".xlsx,.xls" multiple />
-            <button id="managerImportBtn" class="primary-btn">📥 Importer dans la base</button>
+            <button id="managerScanBtn" class="primary-btn">📂 Mise à jour (scanne un dossier)</button>
+            <button id="managerImportBtn" class="secondary-btn" title="Importer manuellement plusieurs fichiers">
+              📥 Importer une sélection
+            </button>
+            <button id="managerExportBtn" class="secondary-btn" title="Télécharger le classeur historisé">📑 Export Excel</button>
             <button id="managerResetBtn" class="danger-btn" title="Effacer la base manager (pas les autres formulaires)">🗑️ Vider la base</button>
           </div>
           <div id="managerImportStatus" class="import-status helper-text"></div>
+          <div id="managerFolderStatus" class="import-status helper-text"></div>
 
-          <div class="table-wrapper-horizontal" style="margin-top: 12px;">
-            <table class="table" id="managerImportsTable">
-              <thead>
-                <tr>
-                  <th>Fichier</th>
-                  <th>Q/S/Heure</th>
-                  <th>Lignes</th>
-                  <th>Importé le</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
         </div>
 
-        <div class="card">
+        <div class="card" id="managerSearchCard">
           <h3>Recherche et tri</h3>
+          <p class="helper-text">Tape un mot-clé ou combine plusieurs filtres. La recherche couvre tous les champs de l'historique.</p>
           <div class="form-grid import-filters">
             <div class="form-group">
               <label for="managerSearchInput">Recherche texte</label>
@@ -623,39 +624,394 @@
                 <option value="asc">Croissant</option>
               </select>
             </div>
+            <div class="form-group">
+              <label for="managerDateStart">Début période (Pareto)</label>
+              <input type="date" id="managerDateStart" />
+            </div>
+            <div class="form-group">
+              <label for="managerDateEnd">Fin période (Pareto)</label>
+              <input type="date" id="managerDateEnd" />
+            </div>
+            <div class="form-group">
+              <label for="managerParetoLine">Ligne (Pareto)</label>
+              <select id="managerParetoLine">
+                <option value="">Toutes</option>
+              </select>
+            </div>
+            <div class="form-group pareto-action">
+              <label>&nbsp;</label>
+              <button id="managerParetoBtn" class="secondary-btn" type="button">📊 Afficher le Pareto des arrêts</button>
+            </div>
           </div>
 
+          <div class="manager-active-filters" id="managerActiveFilters"></div>
           <div class="field-selector" id="managerFieldSelector"></div>
           <p class="helper-text" id="managerResultsCount"></p>
         </div>
       </div>
 
-      <div class="card">
-        <h3>Résultats (base manager)</h3>
-        <div class="table-wrapper-horizontal">
-          <table class="table" id="managerResultsTable">
-            <thead>
-              <tr>
-                <th>Date/Heure</th>
-                <th>Équipe</th>
-                <th>Ligne</th>
-                <th>Sous-ligne</th>
-                <th>Machine</th>
-                <th>Quantité</th>
-                <th>Arrêt (min)</th>
-                <th>Cadence</th>
-                <th>Commentaire</th>
-                <th>Article</th>
-                <th>Personnel</th>
-                <th>Motif</th>
-                <th>Fichier</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+      <div class="card" id="managerResultsCard">
+        <div class="manager-results-header">
+          <div>
+            <h3>Résultats (base manager)</h3>
+            <p class="helper-text">Affichage enrichi avec rappel des métadonnées fichier (quantième, semaine, heure).</p>
+          </div>
+          <div class="manager-result-badges" id="managerResultBadges"></div>
+        </div>
+
+        <div class="manager-results-grid">
+          <div class="manager-stats" id="managerStats"></div>
+
+          <div class="table-wrapper-horizontal">
+            <table class="table manager-table" id="managerResultsTable">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Date/Heure</th>
+                  <th>Équipe</th>
+                  <th>Ligne</th>
+                  <th>Sous-ligne</th>
+                  <th>Machine</th>
+                  <th>Quantité</th>
+                  <th>Arrêt (min)</th>
+                  <th>Cadence</th>
+                  <th>Commentaire</th>
+                  <th>Article</th>
+                  <th>Personnel</th>
+                  <th>Motif</th>
+                  <th>Fichier (Q/S/H)</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="managerParetoCard" style="display: none;">
+        <div class="manager-results-header">
+          <div>
+            <h3 id="managerParetoTitle">Pareto des arrêts</h3>
+            <p class="helper-text" id="managerParetoSubtitle">Camembert basé sur les arrêts (minutes) filtrés par période ou ligne.</p>
+          </div>
+          <div class="manager-result-badges" id="managerParetoBadges"></div>
+        </div>
+        <div class="pareto-chart-wrapper">
+          <canvas id="managerPareto"></canvas>
+        </div>
+        <p class="helper-text pareto-click-info" id="managerParetoClickInfo"></p>
+        <div class="pareto-actions">
+          <button id="managerParetoBackToTop" class="secondary-btn" type="button">⬆️ Haut de page</button>
         </div>
       </div>
     </section>
+
+    <!-- PAGE PLANNING -->
+    <section id="section-planning" class="section">
+      <div class="planning-tabs">
+        <button class="planning-tab-btn active" data-tab="articles">Création article</button>
+        <button class="planning-tab-btn" data-tab="build">Création planning</button>
+        <button class="planning-tab-btn" data-tab="run">Planning</button>
+      </div>
+
+      <div id="planning-tab-articles" class="planning-pane">
+        <div class="card">
+          <h3>Création article</h3>
+          <p class="helper-text">Définis les articles une fois pour toutes : code, libellé, ligne associée, poids colis et cadence. Les enregistrements restent valides pour toutes les semaines mais restent modifiables.</p>
+          <div class="form-grid">
+            <label>Code article
+              <input type="text" id="planningArticleCode" />
+            </label>
+            <label>Libellé
+              <input type="text" id="planningArticleLabel" />
+            </label>
+            <label>Poids colis (kg)
+              <input type="number" id="planningArticlePoids" step="0.01" min="0" />
+            </label>
+            <label>Cadence (colis/h)
+              <input type="number" id="planningArticleCadence" step="0.01" min="0" />
+            </label>
+            <label>Ligne par défaut
+              <select id="planningArticleLine"></select>
+            </label>
+          </div>
+          <div class="buttons-row">
+            <button class="secondary-btn" id="planningArticleAddBtn">Enregistrer l'article</button>
+          </div>
+          <div class="planning-mini-table" id="planningCadenceList"></div>
+        </div>
+      </div>
+
+      <div id="planning-tab-build" class="planning-pane hidden">
+        <div class="card">
+          <h3>Cadre du planning</h3>
+          <div class="planning-inline-fields">
+            <label>Semaine
+              <input type="number" id="planningWeekNumber" min="1" max="53" />
+            </label>
+            <label>Lundi de référence
+              <input type="date" id="planningWeekStart" />
+            </label>
+            <button class="secondary-btn" id="planningRebuildBtn">🔄 Recalage auto</button>
+          </div>
+          <p class="helper-text">Un code article doit être enregistré avant de pouvoir créer un OF.</p>
+        </div>
+
+        <div class="card">
+          <h3>Création planning</h3>
+          <div class="form-grid">
+            <label>Code article
+              <div class="inline-with-action">
+                <input type="text" id="planningOFCode" list="planningArticleCodesList" />
+                <button type="button" class="icon-btn" id="planningArticlePickerBtn" aria-label="Parcourir les articles">ℹ️</button>
+              </div>
+              <datalist id="planningArticleCodesList"></datalist>
+            </label>
+            <label>Ligne
+              <select id="planningOFLine"></select>
+            </label>
+            <label>Quantité (colis)
+              <input type="number" id="planningOFQty" min="0" />
+            </label>
+            <label>Début (jour + heure)
+              <div class="planning-inline">
+                <select id="planningOFDay">
+                  <option value="0">Lundi</option>
+                  <option value="1">Mardi</option>
+                  <option value="2">Mercredi</option>
+                  <option value="3">Jeudi</option>
+                  <option value="4">Vendredi</option>
+                  <option value="5">Samedi</option>
+                </select>
+                <input type="time" id="planningOFStart" />
+              </div>
+            </label>
+            <label>Cadence (colis/h)
+              <input type="number" id="planningOFcadence" step="0.01" min="0" placeholder="auto" />
+            </label>
+          </div>
+          <div class="buttons-row planning-build-actions">
+            <button class="secondary-btn" id="planningOpenStopPopover">Ajouter arrêts</button>
+            <button class="primary-btn" id="planningOFAddBtn">Ajouter l'OF</button>
+          </div>
+          <p class="helper-text" id="planningOFPrereq">Enregistre d'abord les cadences articles pour activer la création d'OF.</p>
+          <div class="planning-validate-row">
+            <div class="planning-validate-left">
+              <label>Charger un planning validé
+                <select id="planningEditSelect"></select>
+              </label>
+              <button class="secondary-btn" id="planningEditLoadBtn">Charger pour édition</button>
+            </div>
+            <button class="primary-btn" id="planningValidateBtn">✅ Valider le planning</button>
+          </div>
+          <div id="planningSavedList" class="planning-mini-table"></div>
+
+          <h4>Prévisualisation du planning</h4>
+          <p class="helper-text">Aperçu en lecture seule du planning construit avant validation.</p>
+          <div id="planningPreview" class="gantt-wrapper gantt-preview"></div>
+        </div>
+      </div>
+
+      <div id="planning-tab-run" class="planning-pane hidden">
+        <div class="card">
+          <h3>Planning</h3>
+          <div class="form-grid">
+            <label>Planning validé
+              <select id="planningLaunchSelect"></select>
+            </label>
+          </div>
+          <div class="buttons-row">
+            <button class="primary-btn" id="planningLaunchBtn">Lancer le planning</button>
+          </div>
+        </div>
+
+        <div class="card planning-view-card">
+          <div class="planning-legend">
+            <span class="legend-item"><span class="legend-dot planned"></span>Non démarré</span>
+            <span class="legend-item"><span class="legend-dot running"></span>En production</span>
+            <span class="legend-item"><span class="legend-dot done"></span>Terminé</span>
+            <span class="legend-item"><span class="legend-dot blocked"></span>Bloqué</span>
+            <span class="legend-item"><span class="legend-dot stop"></span>Arrêt planifié/observé</span>
+          </div>
+          <div id="planningGantt" class="gantt-wrapper"></div>
+          <div class="planning-actions-row">
+            <button class="secondary-btn" id="planningScrollTopBtn">Haut de page</button>
+            <button class="secondary-btn" id="planningShowDelaysBtn">Recalculer avance/retard</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Avance / Retard lignes</h3>
+          <div id="planningDelays" class="planning-delays"></div>
+        </div>
+      </div>
+
+      <div id="planningArticlePicker" class="popover hidden">
+        <div class="popover-content">
+          <div class="popover-header">
+            <h3>Codes articles par ligne</h3>
+            <button class="icon-btn" id="planningArticlePickerClose" aria-label="Fermer">✖</button>
+          </div>
+          <div id="planningArticlePickerBody"></div>
+        </div>
+      </div>
+
+      <div id="planningStopPopover" class="popover hidden">
+        <div class="popover-content">
+          <div class="popover-header">
+            <h4>Ajouter des arrêts prévus</h4>
+            <button class="icon-btn" id="planningStopCloseBtn" aria-label="Fermer">✖</button>
+          </div>
+          <div class="form-grid">
+            <label>Type
+              <select id="planningArretType">
+                <option value="Pause">Pause</option>
+                <option value="Maintenance">Maintenance</option>
+                <option value="Réunion">Réunion</option>
+                <option value="Autre">Autre</option>
+              </select>
+            </label>
+            <label>Ligne
+              <select id="planningArretLine">
+                <option value="ALL">Toutes les lignes</option>
+              </select>
+            </label>
+            <label>Jour
+              <select id="planningArretDay">
+                <option value="ALL">Tous les jours</option>
+                <option value="0">Lundi</option>
+                <option value="1">Mardi</option>
+                <option value="2">Mercredi</option>
+                <option value="3">Jeudi</option>
+                <option value="4">Vendredi</option>
+                <option value="5">Samedi</option>
+              </select>
+            </label>
+            <label>Début
+              <input type="time" id="planningArretStart" />
+            </label>
+            <label>Durée (min)
+              <input type="number" id="planningArretDuration" min="0" />
+            </label>
+            <label>Commentaire
+              <input type="text" id="planningArretComment" />
+            </label>
+          </div>
+          <div class="buttons-row">
+            <button class="secondary-btn" id="planningStopSaveBtn">Ajouter l'arrêt</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="planningBlockEditor" class="modal" hidden>
+        <div class="modal-content">
+          <h3>Modifier le bloc</h3>
+          <div class="form-grid">
+            <label>Quantité (colis)
+              <input type="number" id="planningEditQty" min="0" />
+            </label>
+            <label>Début
+              <input type="datetime-local" id="planningEditStart" />
+            </label>
+            <label>Fin
+              <input type="datetime-local" id="planningEditEnd" />
+            </label>
+            <label>Status
+              <select id="planningEditStatus">
+                <option value="planned">Non dmarré</option>
+                <option value="running">En production</option>
+                <option value="done">Terminé</option>
+                <option value="blocked">Bloqué</option>
+              </select>
+            </label>
+            <label>Raison blocage
+              <input type="text" id="planningEditBlockReason" />
+            </label>
+          </div>
+          <div class="buttons-row">
+            <button class="primary-btn" id="planningEditSaveBtn">Enregistrer</button>
+            <button class="secondary-btn" id="planningEditCancelBtn">Fermer</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- PANNEAU PARAMÈTRES -->
+    <div id="settingsPanel" class="settings-panel hidden">
+      <div class="settings-panel__header">
+        <h3>Paramètres</h3>
+        <button id="settingsClose" class="icon-btn" aria-label="Fermer">✕</button>
+      </div>
+      <p class="helper-text">Mot de passe local, thème et options rapides. Rien n'est envoyé en ligne.</p>
+
+      <div class="settings-grid">
+        <div class="card compact">
+          <h4>Accès Manager</h4>
+          <form id="settingsCreatePasswordForm" class="manager-security-form">
+            <label for="settingsCreatePassword">Créer le mot de passe</label>
+            <input type="password" id="settingsCreatePassword" placeholder="Mot de passe" />
+            <input type="password" id="settingsCreatePasswordConfirm" placeholder="Confirmation" />
+            <button type="submit" class="secondary-btn">💾 Enregistrer</button>
+          </form>
+
+          <form id="settingsChangePasswordForm" class="manager-security-form">
+            <label for="settingsOldPassword">Modifier le mot de passe</label>
+            <input type="password" id="settingsOldPassword" placeholder="Ancien mot de passe" />
+            <input type="password" id="settingsNewPassword" placeholder="Nouveau mot de passe" />
+            <input type="password" id="settingsNewPasswordConfirm" placeholder="Confirmer le nouveau" />
+            <button type="submit" class="secondary-btn">🔐 Mettre à jour</button>
+          </form>
+
+          <div id="settingsSecurityStatus" class="import-status helper-text"></div>
+        </div>
+
+        <div class="card compact">
+          <h4>Dossier des fichiers Excel</h4>
+          <p class="helper-text">Imports, exports et historique utilisent ce dossier (ex : honor200 ➜ Documents).</p>
+          <div class="settings-folder-row">
+            <div>
+              <p id="settingsFolderPath" class="helper-text folder-path">Dossier actuel : Documents</p>
+              <div id="settingsFolderStatus" class="import-status helper-text"></div>
+            </div>
+            <button id="settingsFolderBtn" class="secondary-btn" type="button">📁 Choisir le dossier</button>
+          </div>
+        </div>
+
+        <div class="card compact">
+          <h4>Affichage</h4>
+          <div class="settings-toggle-row">
+            <span>Thème clair / sombre</span>
+            <button id="settingsThemeBtn" class="secondary-btn" type="button">Basculer</button>
+          </div>
+          <div class="settings-toggle-row">
+            <span>Réduire le bandeau</span>
+            <label class="switch">
+              <input type="checkbox" id="headerCompactToggle" checked />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="managerUnlockModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="managerUnlockTitle">
+      <div class="modal__content">
+        <div class="modal__header">
+          <h3 id="managerUnlockTitle">Accès Manager</h3>
+          <button id="managerUnlockClose" class="icon-btn" aria-label="Fermer">✕</button>
+        </div>
+        <p class="helper-text">Saisis le mot de passe pour afficher la page Manager (par défaut : 3005 tant qu'il n'est pas changé).</p>
+        <form id="managerUnlockForm" class="manager-security-form">
+          <input type="password" id="managerUnlockInput" placeholder="Mot de passe" autocomplete="current-password" />
+          <div class="modal__actions">
+            <button type="submit" class="primary-btn">Valider</button>
+            <button type="button" id="managerUnlockCancel" class="secondary-btn">Annuler</button>
+          </div>
+        </form>
+        <div id="managerUnlockStatus" class="import-status helper-text"></div>
+      </div>
+    </div>
 
     <!-- CALCULATRICE FLOTTANTE -->
     <div id="calculator" class="calculator hidden">
