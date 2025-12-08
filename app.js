@@ -353,6 +353,31 @@ function savePlanningSnapshots(snaps) {
   }
 }
 
+function getSavedPlanningList(forceReload = false) {
+  if (forceReload) {
+    const stored = readPlanningSnapshotsFromStorage();
+    if (Array.isArray(stored) && stored.length) {
+      planningSnapshots = [...stored];
+      state.planning.savedPlans = [...stored];
+      saveState();
+      return [...stored];
+    }
+  }
+
+  if (Array.isArray(planningSnapshots) && planningSnapshots.length) return [...planningSnapshots];
+  if (Array.isArray(state?.planning?.savedPlans) && state.planning.savedPlans.length) return [...state.planning.savedPlans];
+
+  const stored = readPlanningSnapshotsFromStorage();
+  if (Array.isArray(stored) && stored.length) {
+    planningSnapshots = [...stored];
+    state.planning.savedPlans = [...stored];
+    saveState();
+    return [...stored];
+  }
+
+  return [];
+}
+
 function getMergedPlanningSnapshots() {
   const stored = readPlanningSnapshotsFromStorage();
   const fromState = state?.planning?.savedPlans || [];
@@ -4802,6 +4827,7 @@ function clearPlanningDraft() {
   resetPlanningPreview();
   const preview = document.getElementById("planningPreview");
   if (preview) preview.classList.add("is-empty");
+  saveState();
 }
 
 function refreshSavedPlanningList(forceReload = false) {
@@ -4810,22 +4836,18 @@ function refreshSavedPlanningList(forceReload = false) {
   const launchSelect = document.getElementById("planningLaunchSelect");
   if (container) container.innerHTML = "";
 
-  if (forceReload) {
-    const stored = readPlanningSnapshotsFromStorage();
-    if (Array.isArray(stored)) {
-      state.planning.savedPlans = [...stored];
-      planningSnapshots = [...stored];
-    }
-  }
+  const list = getSavedPlanningList(forceReload);
+  state.planning.savedPlans = [...list];
+  planningSnapshots = [...list];
 
-  if (!state.planning.savedPlans.length) {
+  if (!list.length) {
     if (container) container.textContent = "Aucun planning validé pour l'instant.";
     if (editSelect) editSelect.innerHTML = "<option value=\"\">Aucun planning</option>";
     if (launchSelect) launchSelect.innerHTML = "<option value=\"\">Aucun planning</option>";
     return;
   }
 
-  const sorted = [...state.planning.savedPlans].sort((a, b) => (b.week || 0) - (a.week || 0));
+  const sorted = [...list].sort((a, b) => (b.week || 0) - (a.week || 0));
   if (container) {
     const rows = sorted
       .map(p => `<div class="helper-text">Semaine ${p.week} – validé le ${formatDateTime(p.savedAt)}</div>`)
