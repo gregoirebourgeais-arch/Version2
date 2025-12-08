@@ -18,6 +18,9 @@
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
+  <!-- IndexedDB helper (Dexie) pour la base locale du manager -->
+  <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+
   <!-- SheetJS -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
@@ -37,6 +40,7 @@
     <div class="app-title">
       <span class="app-main-title">Atelier PPNC</span>
       <span class="app-sub-title">Suivi Production & Arrêts</span>
+      <span class="local-badge" title="Données stockées uniquement sur cet appareil, sans synchronisation externe">Mode hors ligne · Données locales</span>
     </div>
     <div class="header-info" id="header-datetime">
       <!-- injecté JS -->
@@ -74,6 +78,34 @@
         <div class="card">
           <h3>Production par ligne (aujourd'hui)</h3>
           <div id="atelier-lines-summary"></div>
+        </div>
+
+        <div class="card">
+          <h3>Mise à jour Excel</h3>
+          <p class="helper-text">
+            Charge un ou plusieurs fichiers du type <strong>Atelier_DATA_EQN_Qxxx_Sxx_hhmm.xlsx</strong>. Pas de limite à 3 fichiers ni à un seul import par jour.
+          </p>
+
+          <div class="import-actions">
+            <input type="file" id="excelInput" accept=".xlsx,.xls" multiple />
+            <button id="importExcelBtn" class="primary-btn">📥 Mise à jour</button>
+          </div>
+
+          <div id="importStatus" class="import-status helper-text"></div>
+
+          <div class="table-wrapper-horizontal">
+            <table class="table" id="importsTable">
+              <thead>
+                <tr>
+                  <th>Fichier</th>
+                  <th>Q / S / Heure</th>
+                  <th>Enregistrements</th>
+                  <th>Importé le</th>
+                </tr>
+              </thead>
+              <tbody id="importsTableBody"></tbody>
+            </table>
+          </div>
         </div>
 
         <div class="card">
@@ -119,6 +151,52 @@
           <button id="razBtn" class="danger-btn">
             🔄 RAZ équipe (double export + reset)
           </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Recherche dans les imports Excel</h3>
+        <div class="form-grid import-filters">
+          <div class="form-group">
+            <label for="importSearchInput">Recherche texte</label>
+            <input type="text" id="importSearchInput" placeholder="Article, machine, commentaire..." />
+          </div>
+          <div class="form-group">
+            <label for="importEquipeFilter">Équipe</label>
+            <select id="importEquipeFilter">
+              <option value="">Toutes</option>
+              <option value="M">M</option>
+              <option value="AM">AM</option>
+              <option value="N">N</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="importLineFilter">Ligne</label>
+            <select id="importLineFilter">
+              <option value="">Toutes les lignes</option>
+            </select>
+          </div>
+        </div>
+
+        <p class="helper-text" id="importResultsCount"></p>
+
+        <div class="table-wrapper-horizontal">
+          <table class="table" id="importResultsTable">
+            <thead>
+              <tr>
+                <th>Date/Heure</th>
+                <th>Équipe</th>
+                <th>Ligne</th>
+                <th>Machine</th>
+                <th>Quantité</th>
+                <th>Arrêt (min)</th>
+                <th>Cadence</th>
+                <th>Commentaire</th>
+                <th>Fichier</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
       </div>
     </section>
