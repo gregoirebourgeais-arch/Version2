@@ -334,8 +334,8 @@ function readPlanningSnapshotsFromStorage() {
   try {
     const raw = localStorage.getItem(PLANNING_SNAPSHOTS_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    if (Array.isArray(parsed) && parsed.length) planningSnapshotCache = parsed;
-    return Array.isArray(parsed) ? parsed : planningSnapshotCache;
+    planningSnapshotCache = Array.isArray(parsed) ? [...parsed] : [];
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
     console.error("readPlanningSnapshotsFromStorage error", e);
     return planningSnapshotCache;
@@ -343,10 +343,11 @@ function readPlanningSnapshotsFromStorage() {
 }
 
 function savePlanningSnapshots(snaps) {
-  planningSnapshotCache = Array.isArray(snaps) ? [...snaps] : [];
-  planningSnapshots = Array.isArray(snaps) ? [...snaps] : [];
+  const safe = Array.isArray(snaps) ? [...snaps] : [];
+  planningSnapshotCache = [...safe];
+  planningSnapshots = [...safe];
   try {
-    localStorage.setItem(PLANNING_SNAPSHOTS_KEY, JSON.stringify(snaps || []));
+    localStorage.setItem(PLANNING_SNAPSHOTS_KEY, JSON.stringify(safe));
   } catch (e) {
     console.error("savePlanningSnapshots error", e);
   }
@@ -357,7 +358,7 @@ function getMergedPlanningSnapshots() {
   const fromState = state?.planning?.savedPlans || [];
   const merged = [];
 
-  [ ...(Array.isArray(planningSnapshots) ? planningSnapshots : []), ...(Array.isArray(stored) ? stored : []), ...(Array.isArray(fromState) ? fromState : []) ]
+  [ ...(Array.isArray(stored) ? stored : []), ...(Array.isArray(fromState) ? fromState : []), ...(Array.isArray(planningSnapshotCache) ? planningSnapshotCache : []) ]
     .filter(Boolean)
     .forEach(snap => {
       if (!snap || !snap.week) return;
@@ -370,12 +371,12 @@ function getMergedPlanningSnapshots() {
 
 function loadPlanningSnapshots() {
   try {
-    const stored = readPlanningSnapshotsFromStorage();
-    const merged = Array.isArray(stored) && stored.length ? stored : getMergedPlanningSnapshots();
+    const merged = getMergedPlanningSnapshots();
     planningSnapshots = [...(merged || [])];
     if (!state.planning) state.planning = { savedPlans: [] };
-    state.planning.savedPlans = Array.isArray(merged) ? merged : [];
+    state.planning.savedPlans = Array.isArray(merged) ? [...merged] : [];
     savePlanningSnapshots(state.planning.savedPlans);
+    saveState();
   } catch (e) {
     console.error("loadPlanningSnapshots error", e);
     if (!state.planning) state.planning = { savedPlans: [] };
@@ -4809,10 +4810,12 @@ function refreshSavedPlanningList(forceReload = false) {
   const launchSelect = document.getElementById("planningLaunchSelect");
   if (container) container.innerHTML = "";
 
-  if (forceReload && !state.planning.savedPlans.length) {
+  if (forceReload) {
     const stored = readPlanningSnapshotsFromStorage();
-    state.planning.savedPlans = Array.isArray(stored) ? stored : [];
-    planningSnapshots = [...state.planning.savedPlans];
+    if (Array.isArray(stored)) {
+      state.planning.savedPlans = [...stored];
+      planningSnapshots = [...stored];
+    }
   }
 
   if (!state.planning.savedPlans.length) {
