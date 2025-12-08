@@ -335,7 +335,7 @@ function readPlanningSnapshotsFromStorage() {
     const raw = localStorage.getItem(PLANNING_SNAPSHOTS_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
     if (Array.isArray(parsed) && parsed.length) planningSnapshotCache = parsed;
-    return parsed.length ? parsed : planningSnapshotCache;
+    return Array.isArray(parsed) ? parsed : planningSnapshotCache;
   } catch (e) {
     console.error("readPlanningSnapshotsFromStorage error", e);
     return planningSnapshotCache;
@@ -357,30 +357,25 @@ function getMergedPlanningSnapshots() {
   const fromState = state?.planning?.savedPlans || [];
   const merged = [];
 
-  if (planningSnapshots.length) {
-    planningSnapshots.forEach(snap => {
+  [ ...(Array.isArray(planningSnapshots) ? planningSnapshots : []), ...(Array.isArray(stored) ? stored : []), ...(Array.isArray(fromState) ? fromState : []) ]
+    .filter(Boolean)
+    .forEach(snap => {
       if (!snap || !snap.week) return;
       const exists = merged.some(m => `${m.week}` === `${snap.week}`);
       if (!exists) merged.push(snap);
     });
-  }
-
-  [ ...(Array.isArray(stored) ? stored : []), ...(Array.isArray(fromState) ? fromState : []) ].forEach(snap => {
-    if (!snap || !snap.week) return;
-    const exists = merged.some(m => `${m.week}` === `${snap.week}`);
-    if (!exists) merged.push(snap);
-  });
 
   return merged;
 }
 
 function loadPlanningSnapshots() {
   try {
-    const merged = getMergedPlanningSnapshots();
-    planningSnapshots = [...merged];
+    const stored = readPlanningSnapshotsFromStorage();
+    const merged = Array.isArray(stored) && stored.length ? stored : getMergedPlanningSnapshots();
+    planningSnapshots = [...(merged || [])];
     if (!state.planning) state.planning = { savedPlans: [] };
-    state.planning.savedPlans = merged;
-    savePlanningSnapshots(merged);
+    state.planning.savedPlans = Array.isArray(merged) ? merged : [];
+    savePlanningSnapshots(state.planning.savedPlans);
   } catch (e) {
     console.error("loadPlanningSnapshots error", e);
     if (!state.planning) state.planning = { savedPlans: [] };
@@ -4735,6 +4730,12 @@ function bindPlanning() {
 
   document.getElementById("planningValidateBtn")?.addEventListener("click", savePlanningSnapshot);
   document.getElementById("planningLaunchBtn")?.addEventListener("click", () => launchPlanningSnapshot());
+  const launchSelectEl = document.getElementById("planningLaunchSelect");
+  launchSelectEl?.addEventListener("change", e => {
+    const val = e.target.value;
+    if (val) launchPlanningSnapshot(val);
+    else clearActivePlanningView();
+  });
   document.getElementById("planningEditLoadBtn")?.addEventListener("click", loadPlanningForEditing);
 
   bindPlanningEditor();
@@ -4808,9 +4809,9 @@ function refreshSavedPlanningList(forceReload = false) {
   const launchSelect = document.getElementById("planningLaunchSelect");
   if (container) container.innerHTML = "";
 
-  // Recharge depuis le stockage et la mémoire à chaque rafraîchissement pour éviter les listes vides
-  if (forceReload || !state.planning.savedPlans.length) {
-    state.planning.savedPlans = getMergedPlanningSnapshots();
+  if (forceReload && !state.planning.savedPlans.length) {
+    const stored = readPlanningSnapshotsFromStorage();
+    state.planning.savedPlans = Array.isArray(stored) ? stored : [];
     planningSnapshots = [...state.planning.savedPlans];
   }
 
@@ -4890,6 +4891,15 @@ function launchPlanningSnapshot(targetWeekOverride) {
   refreshPlanningGantt();
   refreshPlanningDelays();
   setPlanningTab("run");
+}
+
+function clearActivePlanningView() {
+  state.planning.selectedPlanWeek = "";
+  state.planning.activeOrders = [];
+  state.planning.activeArrets = [];
+  saveState();
+  refreshPlanningGantt();
+  refreshPlanningDelays();
 }
 
 function refreshPlanningDelays() {
