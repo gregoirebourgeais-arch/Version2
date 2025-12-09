@@ -1842,161 +1842,7 @@ function refreshImportSearch() {
   if (equipe) {
     results = results.filter(r => (r.equipe || "").toUpperCase() === equipe);
   }
-}
 
-function resetManagerStore() {
-  managerDataset = [];
-  managerImportLog = [];
-  managerSignatureSet = new Set();
-  localStorage.removeItem(MANAGER_MASTER_KEY);
-  localStorage.removeItem(MANAGER_IMPORT_LOG_KEY);
-  setManagerStatus("Base vidée.", "warning");
-  refreshManagerImports();
-  refreshManagerResults();
-  populateManagerLineFilter();
-  populateManagerParetoLineFilter();
-}
-
-function downloadManagerWorkbook() {
-  try {
-    const rows = managerDataset.map(recordToSheetRow);
-    const ws = XLSX.utils.json_to_sheet(rows, { header: MANAGER_COLUMNS_FOR_EXCEL.map(c => c.header) });
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Historique");
-    const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "manager_historique.xlsx";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    setManagerStatus("Classeur exporté.", "success");
-  } catch (e) {
-    console.error("Export manager impossible", e);
-    setManagerStatus("Impossible de générer le classeur.", "error");
-  }
-}
-
-function bindManagerArea() {
-  loadManagerWorkbookFromStorage();
-  loadManagerImportLog();
-
-  renderManagerFieldSelector();
-  populateManagerSortOptions();
-  populateManagerLineFilter();
-  populateManagerParetoLineFilter();
-  updateManagerLockUI();
-  setManagerFolderStatus("Sélectionne honor200 ➜ Documents pour activer la mise à jour auto.");
-
-  const input = document.getElementById("managerExcelInput");
-  const btn = document.getElementById("managerImportBtn");
-  const scanBtn = document.getElementById("managerScanBtn");
-  const resetBtn = document.getElementById("managerResetBtn");
-  const exportBtn = document.getElementById("managerExportBtn");
-
-  if (btn && input) {
-    btn.addEventListener("click", async () => {
-      const files = Array.from(input.files || []);
-      setManagerStatus("Import en cours...");
-      await importManagerFiles(files);
-      input.value = "";
-    });
-  }
-
-  if (scanBtn) {
-    scanBtn.addEventListener("click", async () => {
-      setManagerStatus("Recherche des fichiers non importés...");
-      await scanFolderForManagerFiles();
-    });
-  }
-
-  if (resetBtn) {
-    resetBtn.addEventListener("click", async () => {
-      const confirmReset = confirm("Vider la base manager ? (sans toucher aux autres formulaires)");
-      if (confirmReset) resetManagerStore();
-    });
-  }
-
-  if (exportBtn) {
-    exportBtn.addEventListener("click", downloadManagerWorkbook);
-  }
-
-  const searchInput = document.getElementById("managerSearchInput");
-  if (searchInput) {
-    searchInput.addEventListener("input", () => {
-      managerSearchState.text = searchInput.value;
-      refreshManagerResults();
-    });
-  }
-
-  const equipeFilter = document.getElementById("managerEquipeFilter");
-  if (equipeFilter) {
-    equipeFilter.addEventListener("change", () => {
-      managerSearchState.equipe = equipeFilter.value;
-      refreshManagerResults();
-    });
-  }
-
-  const lineFilter = document.getElementById("managerLineFilter");
-  if (lineFilter) {
-    lineFilter.addEventListener("change", () => {
-      managerSearchState.ligne = lineFilter.value;
-      refreshManagerResults();
-    });
-  }
-
-  const sortSelect = document.getElementById("managerSortField");
-  if (sortSelect) {
-    sortSelect.addEventListener("change", () => {
-      managerSearchState.sortField = sortSelect.value;
-      refreshManagerResults();
-    });
-  }
-
-  const sortDir = document.getElementById("managerSortDir");
-  if (sortDir) {
-    sortDir.addEventListener("change", () => {
-      managerSearchState.sortDir = sortDir.value;
-      refreshManagerResults();
-    });
-  }
-
-  const dateStart = document.getElementById("managerDateStart");
-  if (dateStart) {
-    dateStart.addEventListener("change", () => {
-      managerParetoFilters.dateStart = dateStart.value;
-      renderManagerPareto();
-    });
-  }
-
-  const dateEnd = document.getElementById("managerDateEnd");
-  if (dateEnd) {
-    dateEnd.addEventListener("change", () => {
-      managerParetoFilters.dateEnd = dateEnd.value;
-      renderManagerPareto();
-    });
-  }
-
-  const paretoLine = document.getElementById("managerParetoLine");
-  if (paretoLine) {
-    paretoLine.addEventListener("change", () => {
-      managerParetoFilters.ligne = paretoLine.value;
-      renderManagerPareto();
-    });
-  }
-
-  const paretoBtn = document.getElementById("managerParetoBtn");
-  paretoBtn?.addEventListener("click", () => renderManagerPareto({ scroll: true }));
-
-  const paretoBackBtn = document.getElementById("managerParetoBackToTop");
-  if (paretoBackBtn) {
-    paretoBackBtn.addEventListener("click", () => {
-      const target = document.getElementById("managerSearchCard") || document.getElementById("managerContent");
-      target?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
   if (ligne) {
     results = results.filter(r => (r.ligne || "") === ligne);
   }
@@ -4540,53 +4386,6 @@ function addPlanningOF() {
   resetPlanningOFForm();
 }
 
-
-  const cadenceInfo = getCadenceForArticle(code, line);
-  if (!cadenceInfo) {
-    alert("Code article inconnu : ajoute-le dans 'Cadences articles' avant de créer l'OF.");
-    return;
-  }
-  line = cadenceInfo.line || line;
-  if (lineSelect) lineSelect.value = line;
-  const cadence = manualCad || (cadenceInfo ? cadenceInfo.cadence : 0);
-  const poids = cadenceInfo ? cadenceInfo.poids : 0;
-  const label = cadenceInfo ? cadenceInfo.label : "";
-
-  const startDate = toDateFromDay(day, startTime);
-  const duration = (qty && cadence) ? (qty / cadence) * 60 : 60;
-  const endDate = new Date(startDate.getTime() + duration * 60000);
-
-  LINES.forEach(recalibrateLine);
-  const conflict = state.planning.orders.some(o => {
-    if (o.line !== line) return false;
-    return rangesOverlap(startDate, endDate, new Date(o.start), new Date(o.end));
-  });
-  if (conflict) {
-    alert("Un OF occupe déjà ce créneau sur cette ligne. Choisis un autre horaire ou déplace l'OF existant.");
-    return;
-  }
-
-  const of = {
-    id: generateId(),
-    code,
-    label,
-    line,
-    quantity: qty,
-    cadence,
-    poids,
-    start: startDate.toISOString(),
-    end: endDate.toISOString(),
-    status: "planned",
-    blockedReason: "",
-  };
-
-  state.planning.orders.push(of);
-  recalibrateLine(line);
-  saveState();
-  refreshPlanningGantt();
-  resetPlanningOFForm();
-}
-
 function resetPlanningArticleForm() {
   const ids = [
     "planningArticleCode",
@@ -5266,6 +5065,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initNav();
   bindManagerArea();
   initLinesSidebar();
+  bindExcelImport();
   bindProductionForm();
   initArretsForm();
   bindOrganisationForm();
