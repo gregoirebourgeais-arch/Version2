@@ -3829,43 +3829,6 @@ function initCalculator() {
  *   THÈME CLAIR / SOMBRE
  ********************************************/
 
-function initTheme() {
-  const btn = document.getElementById("themeToggleBtn");
-  if (!btn) return;
-
-  const saved = localStorage.getItem("themeMode");
-  if (saved === "light") {
-    document.body.classList.add("light-mode");
-  }
-
-  btn.addEventListener("click", () => {
-    document.body.classList.toggle("light-mode");
-
-    if (document.body.classList.contains("light-mode")) {
-      localStorage.setItem("themeMode", "light");
-    } else {
-      localStorage.setItem("themeMode", "dark");
-    }
-  });
-}
-
-function initManagerUnlockModal() {
-  const form = document.getElementById("managerUnlockForm");
-  const cancelBtn = document.getElementById("managerUnlockCancel");
-  const closeBtn = document.getElementById("managerUnlockClose");
-  const input = document.getElementById("managerUnlockInput");
-
-  form?.addEventListener("submit", async e => {
-    e.preventDefault();
-    const ok = await handleUnlock(input?.value || "");
-    if (!ok) {
-      setManagerSecurityStatus("Mot de passe incorrect.", "error");
-    }
-  });
-
-  updateDisplay();
-}
-
 /********************************************
  *   THÈME CLAIR / SOMBRE
  ********************************************/
