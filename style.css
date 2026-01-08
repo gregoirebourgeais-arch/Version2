@@ -1073,6 +1073,18 @@ body.light-mode .helper-text {
   font-weight: 500;
 }
 
+body.light-mode h2 {
+  color: #102a43;
+}
+
+body.light-mode h3 {
+  color: #1a365d;
+}
+
+body.light-mode h4 {
+  color: #2d3748;
+}
+
 /* IMPORT EXCEL */
 .import-actions {
   display: flex;
