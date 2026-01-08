@@ -1032,9 +1032,9 @@ const PlanningModule = (function() {
 })();
 
 // Initialiser quand le DOM est prêt
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', PlanningModule.init);
-} else {
-  // DOM déjà chargé, initialiser après un court délai pour être sûr que tout est prêt
-  setTimeout(PlanningModule.init, 100);
-}
+document.addEventListener('DOMContentLoaded', function() {
+  // Attendre un peu que tout soit chargé
+  setTimeout(function() {
+    PlanningModule.init();
+  }, 500);
+});
