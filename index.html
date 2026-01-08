@@ -708,72 +708,86 @@
     <!-- PAGE PLANNING -->
     <section id="section-planning" class="section">
       <div class="planning-tabs">
-        <button class="planning-tab-btn active" data-tab="articles">Création article</button>
-        <button class="planning-tab-btn" data-tab="build">Création planning</button>
-        <button class="planning-tab-btn" data-tab="run">Planning</button>
+        <button class="planning-tab-btn active" data-tab="articles">📦 Articles</button>
+        <button class="planning-tab-btn" data-tab="build">🔧 Créer Planning</button>
+        <button class="planning-tab-btn" data-tab="run">📊 Planning Actif</button>
       </div>
 
+      <!-- TAB 1: GESTION DES ARTICLES -->
       <div id="planning-tab-articles" class="planning-pane">
         <div class="card">
-          <h3>Création article</h3>
-          <p class="helper-text">Définis les articles une fois pour toutes : code, libellé, ligne associée, poids colis et cadence. Les enregistrements restent valides pour toutes les semaines mais restent modifiables.</p>
-          <div class="form-grid">
-            <label>Code article
-              <input type="text" id="planningArticleCode" />
-            </label>
-            <label>Libellé
-              <input type="text" id="planningArticleLabel" />
-            </label>
-            <label>Poids colis (kg)
-              <input type="number" id="planningArticlePoids" step="0.01" min="0" />
-            </label>
-            <label>Cadence (colis/h)
-              <input type="number" id="planningArticleCadence" step="0.01" min="0" />
-            </label>
-            <label>Ligne par défaut
-              <select id="planningArticleLine"></select>
-            </label>
+          <h3>📦 Base Articles</h3>
+          <p class="helper-text">Les articles sont permanents et utilisables pour tous vos plannings. Chaque article est lié à une ligne et une cadence.</p>
+          
+          <div class="planning-article-form">
+            <div class="form-grid">
+              <label>Code article *
+                <input type="text" id="planningArticleCode" placeholder="Ex: ART001" />
+              </label>
+              <label>Libellé *
+                <input type="text" id="planningArticleLabel" placeholder="Ex: Emmental râpé 200g" />
+              </label>
+              <label>Ligne de production *
+                <select id="planningArticleLine"></select>
+              </label>
+              <label>Cadence (colis/h) *
+                <input type="number" id="planningArticleCadence" step="1" min="1" placeholder="Ex: 150" />
+              </label>
+              <label>Poids colis (kg)
+                <input type="number" id="planningArticlePoids" step="0.01" min="0" placeholder="Ex: 2.5" />
+              </label>
+            </div>
+            <div class="buttons-row">
+              <button class="primary-btn" id="planningArticleAddBtn">➕ Ajouter / Modifier</button>
+              <button class="secondary-btn" id="planningArticleClearBtn">🗑️ Effacer</button>
+            </div>
           </div>
-          <div class="buttons-row">
-            <button class="secondary-btn" id="planningArticleAddBtn">Enregistrer l'article</button>
+
+          <h4>Liste des articles enregistrés</h4>
+          <div class="planning-articles-list" id="planningArticlesList">
+            <p class="helper-text">Aucun article enregistré.</p>
           </div>
-          <div class="planning-mini-table" id="planningCadenceList"></div>
         </div>
       </div>
 
+      <!-- TAB 2: CRÉATION DU PLANNING -->
       <div id="planning-tab-build" class="planning-pane hidden">
         <div class="card">
-          <h3>Cadre du planning</h3>
-          <div class="planning-inline-fields">
-            <label>Semaine
+          <h3>📅 Paramètres du Planning</h3>
+          <div class="planning-week-config">
+            <label>Semaine n°
               <input type="number" id="planningWeekNumber" min="1" max="53" />
             </label>
             <label>Lundi de référence
               <input type="date" id="planningWeekStart" />
             </label>
-            <button class="secondary-btn" id="planningRebuildBtn">🔄 Recalage auto</button>
+            <button class="secondary-btn" id="planningAutoWeekBtn">📆 Semaine actuelle</button>
           </div>
-          <p class="helper-text">Un code article doit être enregistré avant de pouvoir créer un OF.</p>
         </div>
 
         <div class="card">
-          <h3>Création planning</h3>
-          <div class="form-grid">
-            <label>Code article
-              <div class="inline-with-action">
-                <input type="text" id="planningOFCode" list="planningArticleCodesList" />
-                <button type="button" class="icon-btn" id="planningArticlePickerBtn" aria-label="Parcourir les articles">ℹ️</button>
-              </div>
-              <datalist id="planningArticleCodesList"></datalist>
-            </label>
-            <label>Ligne
-              <select id="planningOFLine"></select>
-            </label>
-            <label>Quantité (colis)
-              <input type="number" id="planningOFQty" min="0" />
-            </label>
-            <label>Début (jour + heure)
-              <div class="planning-inline">
+          <h3>🏭 Créer un Ordre de Fabrication (OF)</h3>
+          <div id="planningOFNoArticles" class="helper-text warning-text">
+            ⚠️ Aucun article enregistré. Créez d'abord des articles dans l'onglet "Articles".
+          </div>
+          
+          <div id="planningOFForm" class="planning-of-form">
+            <div class="form-grid">
+              <label>Article *
+                <select id="planningOFArticle">
+                  <option value="">-- Sélectionner un article --</option>
+                </select>
+              </label>
+              <label>Ligne
+                <select id="planningOFLine" disabled></select>
+              </label>
+              <label>Quantité (colis) *
+                <input type="number" id="planningOFQty" min="1" placeholder="Ex: 1000" />
+              </label>
+              <label>Cadence (colis/h)
+                <input type="number" id="planningOFCadence" step="1" min="1" readonly />
+              </label>
+              <label>Jour de début *
                 <select id="planningOFDay">
                   <option value="0">Lundi</option>
                   <option value="1">Mardi</option>
@@ -782,102 +796,113 @@
                   <option value="4">Vendredi</option>
                   <option value="5">Samedi</option>
                 </select>
-                <input type="time" id="planningOFStart" />
-              </div>
-            </label>
-            <label>Cadence (colis/h)
-              <input type="number" id="planningOFcadence" step="0.01" min="0" placeholder="auto" />
-            </label>
-          </div>
-          <div class="buttons-row planning-build-actions">
-            <button class="secondary-btn" id="planningOpenStopPopover">Ajouter arrêts</button>
-            <button class="primary-btn" id="planningOFAddBtn">Ajouter l'OF</button>
-          </div>
-          <p class="helper-text" id="planningOFPrereq">Enregistre d'abord les cadences articles pour activer la création d'OF.</p>
-          <div class="planning-validate-row">
-            <div class="planning-validate-left">
-              <label>Charger un planning validé
-                <select id="planningEditSelect"></select>
               </label>
-              <button class="secondary-btn" id="planningEditLoadBtn">Charger pour édition</button>
+              <label>Heure de début *
+                <input type="time" id="planningOFStart" value="06:00" />
+              </label>
             </div>
+            
+            <div class="planning-of-preview">
+              <div class="of-preview-item">
+                <span class="of-preview-label">Durée estimée:</span>
+                <span class="of-preview-value" id="planningOFDuration">--</span>
+              </div>
+              <div class="of-preview-item">
+                <span class="of-preview-label">Fin prévue:</span>
+                <span class="of-preview-value" id="planningOFEnd">--</span>
+              </div>
+              <div class="of-preview-item">
+                <span class="of-preview-label">Prochain créneau dispo:</span>
+                <span class="of-preview-value" id="planningOFNextSlot">--</span>
+              </div>
+            </div>
+
+            <div class="buttons-row">
+              <button class="primary-btn" id="planningOFAddBtn">➕ Ajouter l'OF</button>
+              <button class="secondary-btn" id="planningOFSuggestBtn">💡 Placer automatiquement</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>📋 OFs du planning en cours</h3>
+          <div id="planningOFList" class="planning-of-list">
+            <p class="helper-text">Aucun OF ajouté. Créez des OFs ci-dessus.</p>
+          </div>
+          
+          <div class="buttons-row planning-validate-row">
+            <button class="secondary-btn" id="planningClearAllOFBtn">🗑️ Supprimer tous les OFs</button>
             <button class="primary-btn" id="planningValidateBtn">✅ Valider le planning</button>
           </div>
-          <div id="planningSavedList" class="planning-mini-table"></div>
+        </div>
 
-          <h4>Prévisualisation du planning</h4>
-          <p class="helper-text">Aperçu en lecture seule du planning construit avant validation.</p>
-          <div id="planningPreview" class="gantt-wrapper gantt-preview"></div>
+        <div class="card">
+          <h3>👁️ Prévisualisation Gantt</h3>
+          <div id="planningPreviewGantt" class="gantt-container">
+            <div class="gantt-empty">Ajoutez des OFs pour voir la prévisualisation</div>
+          </div>
         </div>
       </div>
 
+      <!-- TAB 3: PLANNING ACTIF -->
       <div id="planning-tab-run" class="planning-pane hidden">
         <div class="card">
-          <h3>Planning</h3>
-          <div class="form-grid">
+          <h3>📊 Sélection du Planning</h3>
+          <div class="planning-select-row">
             <label>Planning validé
-              <select id="planningLaunchSelect"></select>
+              <select id="planningSelectWeek">
+                <option value="">-- Sélectionner un planning --</option>
+              </select>
             </label>
+            <button class="primary-btn" id="planningLaunchBtn">🚀 Charger</button>
           </div>
-          <div class="buttons-row">
-            <button class="primary-btn" id="planningLaunchBtn">Lancer le planning</button>
-          </div>
-        </div>
-
-        <div class="card planning-view-card">
-          <div class="planning-legend">
-            <span class="legend-item"><span class="legend-dot planned"></span>Non démarré</span>
-            <span class="legend-item"><span class="legend-dot running"></span>En production</span>
-            <span class="legend-item"><span class="legend-dot done"></span>Terminé</span>
-            <span class="legend-item"><span class="legend-dot blocked"></span>Bloqué</span>
-            <span class="legend-item"><span class="legend-dot stop"></span>Arrêt planifié/observé</span>
-          </div>
-          <div id="planningGantt" class="gantt-wrapper"></div>
-          <div class="planning-actions-row">
-            <button class="secondary-btn" id="planningScrollTopBtn">Haut de page</button>
-            <button class="secondary-btn" id="planningShowDelaysBtn">Recalculer avance/retard</button>
+          <div id="planningActiveInfo" class="planning-active-info hidden">
+            <span class="planning-active-badge">Planning actif: Semaine <span id="planningActiveWeek">--</span></span>
           </div>
         </div>
 
         <div class="card">
-          <h3>Avance / Retard lignes</h3>
-          <div id="planningDelays" class="planning-delays"></div>
-        </div>
-      </div>
-
-      <div id="planningArticlePicker" class="popover hidden">
-        <div class="popover-content">
-          <div class="popover-header">
-            <h3>Codes articles par ligne</h3>
-            <button class="icon-btn" id="planningArticlePickerClose" aria-label="Fermer">✖</button>
+          <h3>📈 Diagramme de Gantt</h3>
+          <div class="planning-legend">
+            <span class="legend-item"><span class="legend-dot planned"></span>Planifié</span>
+            <span class="legend-item"><span class="legend-dot running"></span>En cours</span>
+            <span class="legend-item"><span class="legend-dot done"></span>Terminé</span>
+            <span class="legend-item"><span class="legend-dot late"></span>En retard</span>
+            <span class="legend-item"><span class="legend-dot stop"></span>Arrêt</span>
           </div>
-          <div id="planningArticlePickerBody"></div>
+          <div id="planningGantt" class="gantt-container">
+            <div class="gantt-empty">Sélectionnez un planning pour l'afficher</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>⏱️ Avance / Retard par ligne</h3>
+          <div id="planningDelaysContainer" class="planning-delays-container">
+            <p class="helper-text">Chargez un planning pour voir l'avance/retard.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>📝 Liste des OFs</h3>
+          <div id="planningActiveOFList" class="planning-of-list">
+            <p class="helper-text">Aucun planning chargé.</p>
+          </div>
         </div>
       </div>
 
-      <div id="planningStopPopover" class="popover hidden">
-        <div class="popover-content">
-          <div class="popover-header">
-            <h4>Ajouter des arrêts prévus</h4>
-            <button class="icon-btn" id="planningStopCloseBtn" aria-label="Fermer">✖</button>
+      <!-- MODAL: Édition OF -->
+      <div id="planningOFEditModal" class="modal hidden">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>✏️ Modifier l'OF</h3>
+            <button class="icon-btn" id="planningOFEditClose">✖</button>
           </div>
           <div class="form-grid">
-            <label>Type
-              <select id="planningArretType">
-                <option value="Pause">Pause</option>
-                <option value="Maintenance">Maintenance</option>
-                <option value="Réunion">Réunion</option>
-                <option value="Autre">Autre</option>
-              </select>
-            </label>
-            <label>Ligne
-              <select id="planningArretLine">
-                <option value="ALL">Toutes les lignes</option>
-              </select>
+            <label>Quantité (colis)
+              <input type="number" id="planningEditOFQty" min="1" />
             </label>
             <label>Jour
-              <select id="planningArretDay">
-                <option value="ALL">Tous les jours</option>
+              <select id="planningEditOFDay">
                 <option value="0">Lundi</option>
                 <option value="1">Mardi</option>
                 <option value="2">Mercredi</option>
@@ -886,50 +911,21 @@
                 <option value="5">Samedi</option>
               </select>
             </label>
-            <label>Début
-              <input type="time" id="planningArretStart" />
+            <label>Heure début
+              <input type="time" id="planningEditOFStart" />
             </label>
-            <label>Durée (min)
-              <input type="number" id="planningArretDuration" min="0" />
-            </label>
-            <label>Commentaire
-              <input type="text" id="planningArretComment" />
-            </label>
-          </div>
-          <div class="buttons-row">
-            <button class="secondary-btn" id="planningStopSaveBtn">Ajouter l'arrêt</button>
-          </div>
-        </div>
-      </div>
-
-      <div id="planningBlockEditor" class="modal" hidden>
-        <div class="modal-content">
-          <h3>Modifier le bloc</h3>
-          <div class="form-grid">
-            <label>Quantité (colis)
-              <input type="number" id="planningEditQty" min="0" />
-            </label>
-            <label>Début
-              <input type="datetime-local" id="planningEditStart" />
-            </label>
-            <label>Fin
-              <input type="datetime-local" id="planningEditEnd" />
-            </label>
-            <label>Status
-              <select id="planningEditStatus">
-                <option value="planned">Non dmarré</option>
-                <option value="running">En production</option>
+            <label>Statut
+              <select id="planningEditOFStatus">
+                <option value="planned">Planifié</option>
+                <option value="running">En cours</option>
                 <option value="done">Terminé</option>
                 <option value="blocked">Bloqué</option>
               </select>
             </label>
-            <label>Raison blocage
-              <input type="text" id="planningEditBlockReason" />
-            </label>
           </div>
           <div class="buttons-row">
-            <button class="primary-btn" id="planningEditSaveBtn">Enregistrer</button>
-            <button class="secondary-btn" id="planningEditCancelBtn">Fermer</button>
+            <button class="danger-btn" id="planningEditOFDelete">🗑️ Supprimer</button>
+            <button class="primary-btn" id="planningEditOFSave">💾 Enregistrer</button>
           </div>
         </div>
       </div>
