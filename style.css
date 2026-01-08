@@ -711,16 +711,28 @@ body.light-mode .equipe-selector:hover {
 
 .calculator {
   position: fixed;
-  right: 12px;
-  bottom: 82px;
-  width: 260px;
-  background: #050b11;
-  border-radius: 16px;
-  box-shadow: var(--shadow-soft);
-  border: var(--border-subtle);
-  z-index: 50;
-  padding: 14px;
-  animation: fadeIn 0.2s ease-out;
+  right: 20px;
+  bottom: 90px;
+  width: 280px;
+  background: linear-gradient(145deg, #0d1520, #070c14);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  border: none;
+  z-index: 1000;
+  padding: 16px;
+  animation: calcPopIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  backdrop-filter: blur(10px);
+}
+
+@keyframes calcPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .calculator.hidden {
