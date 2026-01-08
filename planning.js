@@ -199,11 +199,22 @@ const PlanningModule = (function() {
   }
 
   function addOrUpdateArticle() {
-    const code = document.getElementById('planningArticleCode')?.value.trim().toUpperCase();
-    const label = document.getElementById('planningArticleLabel')?.value.trim();
-    const line = document.getElementById('planningArticleLine')?.value;
-    const cadence = parseFloat(document.getElementById('planningArticleCadence')?.value) || 0;
-    const poids = parseFloat(document.getElementById('planningArticlePoids')?.value) || 0;
+    console.log('addOrUpdateArticle called');
+    const codeEl = document.getElementById('planningArticleCode');
+    const labelEl = document.getElementById('planningArticleLabel');
+    const lineEl = document.getElementById('planningArticleLine');
+    const cadenceEl = document.getElementById('planningArticleCadence');
+    const poidsEl = document.getElementById('planningArticlePoids');
+    
+    console.log('Elements:', { codeEl, labelEl, lineEl, cadenceEl, poidsEl });
+    
+    const code = codeEl?.value?.trim()?.toUpperCase() || '';
+    const label = labelEl?.value?.trim() || '';
+    const line = lineEl?.value || '';
+    const cadence = parseFloat(cadenceEl?.value) || 0;
+    const poids = parseFloat(poidsEl?.value) || 0;
+
+    console.log('Values:', { code, label, line, cadence, poids });
 
     if (!code || !label || !line || cadence <= 0) {
       alert('Veuillez remplir tous les champs obligatoires (code, libellé, ligne, cadence).');
@@ -218,6 +229,9 @@ const PlanningModule = (function() {
     } else {
       planningState.articles.push(article);
     }
+    
+    console.log('Article added:', article);
+    console.log('All articles:', planningState.articles);
 
     savePlanningState();
     renderArticlesList();
