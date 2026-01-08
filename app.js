@@ -4721,6 +4721,11 @@ function bindPlanningEditor() {
 }
 
 function bindPlanning() {
+  // DÉSACTIVÉ: Le nouveau module PlanningModule (planning.js) remplace cette fonction
+  console.log('bindPlanning désactivé - utilisation du nouveau PlanningModule');
+  return;
+  
+  /* ANCIEN CODE DÉSACTIVÉ
   ensurePlanningDefaults();
   const knownWeeks = (state.planning.savedPlans || []).map(p => `${p.week}`);
   if (!knownWeeks.includes(`${state.planning.selectedPlanWeek || ""}`)) {
@@ -4797,6 +4802,7 @@ function bindPlanning() {
   refreshSavedPlanningList(true);
   refreshPlanningGantt();
   refreshPlanningDelays();
+  */
 }
 
 function savePlanningSnapshot() {
