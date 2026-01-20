@@ -2357,76 +2357,76 @@ body.is-landscape {
 .legend-dot.late { background: #e57373; }
 
 /* ==========================================
-   GANTT V3 - DRAG & DROP + MARQUEUR TEMPS
+   GANTT V4 - ÉCHELLE PRÉCISE + DRAG & DROP
    ========================================== */
 
-.gantt-chart-v3 {
-  position: relative;
+.gantt-wrapper-v4 {
+  overflow-x: auto;
   padding: 0;
 }
 
-.gantt-header-v3 {
+.gantt-header-v4 {
   display: flex;
+  background: rgba(0, 0, 0, 0.4);
   border-bottom: 2px solid rgba(255, 255, 255, 0.15);
   position: sticky;
   top: 0;
-  background: rgba(0, 0, 0, 0.4);
-  z-index: 10;
+  z-index: 20;
 }
 
-.gantt-corner {
+.gantt-corner-v4 {
   width: 120px;
   min-width: 120px;
-  padding: 8px 12px;
+  padding: 12px;
   font-weight: 700;
   font-size: 0.85rem;
   color: var(--text-muted);
+  background: rgba(0, 0, 0, 0.3);
   border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.gantt-time-header {
+.gantt-timeline-header {
   position: relative;
-  height: 50px;
-  flex: 1;
+  height: 55px;
 }
 
-.gantt-day-label {
+.gantt-day-header-v4 {
   position: absolute;
   top: 0;
-  height: 28px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
   font-size: 0.9rem;
   color: var(--accent);
-  border-left: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(77, 163, 255, 0.08);
+  background: rgba(77, 163, 255, 0.1);
+  border-left: 2px solid rgba(77, 163, 255, 0.3);
+  box-sizing: border-box;
 }
 
-.gantt-day-label:first-child {
-  border-left: none;
-}
-
-.gantt-hour-tick {
+.gantt-hours-row {
   position: absolute;
-  top: 30px;
+  top: 32px;
+  left: 0;
+  right: 0;
+  height: 20px;
+}
+
+.gantt-hour-label {
+  position: absolute;
   font-size: 0.7rem;
   color: var(--text-muted);
   transform: translateX(-50%);
 }
 
-.gantt-row-v3 {
+.gantt-row-v4 {
   display: flex;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  min-height: 70px;
+  min-height: 65px;
 }
 
-.gantt-row-v3:hover {
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.gantt-line-label-v3 {
+.gantt-line-name-v4 {
   width: 120px;
   min-width: 120px;
   padding: 8px 12px;
@@ -2435,138 +2435,167 @@ body.is-landscape {
   color: var(--text-main);
   display: flex;
   align-items: center;
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.2);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.gantt-line-blocks-v3 {
+.gantt-line-track {
   position: relative;
-  flex: 1;
-  min-height: 70px;
-  transition: background 0.2s;
+  min-height: 65px;
+  background: rgba(255, 255, 255, 0.01);
 }
 
-.gantt-line-blocks-v3.drag-over {
-  background: rgba(77, 163, 255, 0.15);
-}
-
-.gantt-day-bg {
+.gantt-grid-line {
   position: absolute;
   top: 0;
   bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
 }
 
-.gantt-day-bg.even {
+.gantt-day-bg-v4 {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.gantt-day-bg-v4.even {
   background: rgba(255, 255, 255, 0.02);
 }
 
-.gantt-day-bg.odd {
-  background: transparent;
-}
-
-/* Marqueur "maintenant" */
-.gantt-now-marker {
+/* Marqueur "maintenant" - BIEN VISIBLE */
+.gantt-now-line {
   position: absolute;
   top: 0;
   bottom: 0;
   width: 3px;
-  background: var(--danger);
-  z-index: 15;
+  background: #ff4757;
+  z-index: 50;
   pointer-events: none;
-  box-shadow: 0 0 8px var(--danger);
+  box-shadow: 0 0 12px rgba(255, 71, 87, 0.8), 0 0 24px rgba(255, 71, 87, 0.4);
 }
 
-.gantt-now-marker::before {
-  content: '▼';
+.gantt-now-line .now-label {
   position: absolute;
-  top: -2px;
+  top: -22px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 10px;
-  color: var(--danger);
-}
-
-.gantt-now-marker::after {
-  content: 'Maintenant';
-  position: absolute;
-  top: -18px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.65rem;
-  color: var(--danger);
-  white-space: nowrap;
-  background: rgba(0, 0, 0, 0.7);
-  padding: 2px 6px;
+  background: #ff4757;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 8px;
   border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(255, 71, 87, 0.4);
 }
 
-/* Blocs OF */
-.gantt-block-v3 {
+.gantt-now-line::after {
+  content: '';
   position: absolute;
-  top: 8px;
-  height: calc(100% - 16px);
-  min-height: 54px;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #ff4757;
+}
+
+/* Arrêts planifiés */
+.gantt-stop-block {
+  position: absolute;
+  top: 6px;
+  height: calc(100% - 12px);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  z-index: 5;
+  overflow: hidden;
+}
+
+.gantt-stop-block.planned {
+  background: linear-gradient(135deg, #ffeaa7, #fdcb6e);
+  border: 2px dashed #f39c12;
+  color: #6c5c0a;
+}
+
+.gantt-stop-block.unplanned {
+  background: linear-gradient(135deg, #fab1a0, #e17055);
+  border: 2px solid #d63031;
+  color: #fff;
+}
+
+.stop-icon {
+  font-size: 1rem;
+}
+
+.stop-label {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Blocs OF - DRAG & DROP */
+.gantt-of-block {
+  position: absolute;
+  top: 6px;
+  height: calc(100% - 12px);
+  min-height: 52px;
   border-radius: 8px;
   cursor: grab;
   overflow: hidden;
-  transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-  z-index: 5;
-}
-
-.gantt-block-v3:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  transition: box-shadow 0.2s, transform 0.15s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   z-index: 10;
+  user-select: none;
 }
 
-.gantt-block-v3:active {
+.gantt-of-block:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  transform: translateY(-2px);
+  z-index: 15;
+}
+
+.gantt-of-block.dragging {
+  opacity: 0.7;
   cursor: grabbing;
+  z-index: 100;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
-.gantt-block-v3.dragging {
-  opacity: 0.5;
-  transform: scale(0.95);
+.gantt-of-block.planned {
+  background: linear-gradient(135deg, #ffb142 0%, #ff9f1a 100%);
+  border: 2px solid #cc7000;
 }
 
-.gantt-block-v3.planned {
-  background: linear-gradient(135deg, #ffb74d 0%, #ff9800 100%);
-  border: 2px solid #e65100;
+.gantt-of-block.running {
+  background: linear-gradient(135deg, #54a0ff 0%, #2e86de 100%);
+  border: 2px solid #0c5cbb;
 }
 
-.gantt-block-v3.running {
-  background: linear-gradient(135deg, #64b5f6 0%, #1e88e5 100%);
-  border: 2px solid #0d47a1;
+.gantt-of-block.done {
+  background: linear-gradient(135deg, #26de81 0%, #20bf6b 100%);
+  border: 2px solid #0d8044;
 }
 
-.gantt-block-v3.done {
-  background: linear-gradient(135deg, #81c784 0%, #43a047 100%);
-  border: 2px solid #1b5e20;
-}
-
-.gantt-block-v3.late {
-  background: linear-gradient(135deg, #e57373 0%, #d32f2f 100%);
-  border: 2px solid #b71c1c;
-  animation: pulse-late 2s infinite;
+.gantt-of-block.late {
+  background: linear-gradient(135deg, #fc5c65 0%, #eb3b5a 100%);
+  border: 2px solid #c0392b;
+  animation: pulse-late 1.5s infinite;
 }
 
 @keyframes pulse-late {
-  0%, 100% { box-shadow: 0 2px 8px rgba(211, 47, 47, 0.4); }
-  50% { box-shadow: 0 2px 16px rgba(211, 47, 47, 0.7); }
+  0%, 100% { box-shadow: 0 2px 8px rgba(235, 59, 90, 0.4); }
+  50% { box-shadow: 0 4px 20px rgba(235, 59, 90, 0.8); }
 }
 
-.gantt-block-v3.stop {
-  background: linear-gradient(135deg, #ffcc80 0%, #ffa726 100%);
-  border: 2px solid #ef6c00;
-  cursor: default;
-}
-
-.gantt-block-v3.stop:hover {
-  transform: none;
-}
-
-/* Barre de progression */
-.gantt-progress {
+.gantt-progress-bar {
   position: absolute;
   top: 0;
   left: 0;
@@ -2576,69 +2605,104 @@ body.is-landscape {
   z-index: 1;
 }
 
-.gantt-block-content {
+.gantt-of-content {
   position: relative;
   z-index: 2;
   padding: 6px 10px;
   color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
-.gantt-block-title {
-  font-weight: 700;
-  font-size: 0.85rem;
+.gantt-of-code {
+  font-weight: 800;
+  font-size: 0.9rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.gantt-block-meta {
+.gantt-of-qty {
   font-size: 0.75rem;
-  opacity: 0.9;
+  opacity: 0.95;
 }
 
-.gantt-block-time {
+.gantt-of-time {
   font-size: 0.7rem;
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
-.gantt-block-produced {
-  font-size: 0.7rem;
+/* Liste des arrêts planifiés */
+.planned-stops-list {
+  margin-top: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.stop-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(253, 203, 110, 0.1);
+  border: 1px solid rgba(253, 203, 110, 0.3);
+  border-radius: 8px;
+}
+
+.stop-card-type {
   font-weight: 700;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.25);
-  padding: 2px 6px;
-  border-radius: 4px;
-  display: inline-block;
-  margin-top: 2px;
+  color: #fdcb6e;
+}
+
+.stop-card-details {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.stop-card-comment {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 /* Light mode */
-body.light-mode .gantt-header-v3 {
-  background: rgba(255, 255, 255, 0.9);
+body.light-mode .gantt-header-v4,
+body.light-mode .gantt-corner-v4 {
+  background: rgba(255, 255, 255, 0.95);
 }
 
-body.light-mode .gantt-corner,
-body.light-mode .gantt-line-label-v3 {
+body.light-mode .gantt-line-name-v4 {
   background: rgba(0, 50, 100, 0.05);
 }
 
-body.light-mode .gantt-day-label {
-  background: rgba(20, 83, 214, 0.08);
+body.light-mode .gantt-day-header-v4 {
+  background: rgba(20, 83, 214, 0.1);
+  border-color: rgba(20, 83, 214, 0.3);
   color: #1453d6;
 }
 
-body.light-mode .gantt-day-bg.even {
+body.light-mode .gantt-day-bg-v4.even {
   background: rgba(0, 50, 100, 0.03);
 }
 
-body.light-mode .gantt-block-content {
-  color: #1a1a1a;
+body.light-mode .gantt-grid-line {
+  background: rgba(0, 50, 100, 0.08);
+}
+
+body.light-mode .gantt-of-content {
   text-shadow: none;
 }
 
-body.light-mode .gantt-block-v3.late .gantt-block-content {
+body.light-mode .gantt-of-block.late .gantt-of-content,
+body.light-mode .gantt-stop-block.unplanned {
   color: #fff;
+}
+
+body.light-mode .stop-card {
+  background: rgba(253, 203, 110, 0.15);
 }
 
 .danger-btn {
