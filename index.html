@@ -766,6 +766,53 @@
         </div>
 
         <div class="card">
+          <h3>⏸️ Arrêts Planifiés</h3>
+          <p class="helper-text">Définissez les pauses, maintenances et autres arrêts récurrents.</p>
+          <div class="form-grid">
+            <label>Type d'arrêt
+              <select id="plannedStopType">
+                <option value="Pause">Pause</option>
+                <option value="Maintenance">Maintenance</option>
+                <option value="Nettoyage">Nettoyage</option>
+                <option value="Réunion">Réunion</option>
+                <option value="Autre">Autre</option>
+              </select>
+            </label>
+            <label>Ligne
+              <select id="plannedStopLine">
+                <option value="ALL">Toutes les lignes</option>
+              </select>
+            </label>
+            <label>Jour
+              <select id="plannedStopDay">
+                <option value="ALL">Tous les jours</option>
+                <option value="0">Lundi</option>
+                <option value="1">Mardi</option>
+                <option value="2">Mercredi</option>
+                <option value="3">Jeudi</option>
+                <option value="4">Vendredi</option>
+                <option value="5">Samedi</option>
+              </select>
+            </label>
+            <label>Heure début
+              <input type="time" id="plannedStopStart" value="12:00" />
+            </label>
+            <label>Durée (minutes)
+              <input type="number" id="plannedStopDuration" value="30" min="5" />
+            </label>
+            <label>Commentaire
+              <input type="text" id="plannedStopComment" placeholder="Optionnel" />
+            </label>
+          </div>
+          <div class="buttons-row">
+            <button class="secondary-btn" id="plannedStopAddBtn">➕ Ajouter l'arrêt</button>
+          </div>
+          <div id="plannedStopsList" class="planned-stops-list">
+            <p class="helper-text">Aucun arrêt planifié.</p>
+          </div>
+        </div>
+
+        <div class="card">
           <h3>🏭 Créer un Ordre de Fabrication (OF)</h3>
           <div id="planningOFNoArticles" class="helper-text warning-text">
             ⚠️ Aucun article enregistré. Créez d'abord des articles dans l'onglet "Articles".
