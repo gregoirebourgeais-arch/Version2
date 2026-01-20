@@ -1,29 +1,29 @@
 /********************************************
- *   MODULE PLANNING - VERSION 3.0
+ *   MODULE PLANNING - VERSION 4.0
  *   Système de planification de production
- *   Avec Drag&Drop, intégration arrêts/production
+ *   Drag&Drop, Arrêts planifiés, Échelle précise
  ********************************************/
 
 const PlanningModule = (function() {
   // Configuration
   const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-  const DAYS_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
   const TOTAL_HOURS = 5 * 24 + 12; // Lun 00:00 -> Sam 12:00 = 132 heures
-  const GANTT_WIDTH_PX = 1320; // 10px par heure
+  const PX_PER_HOUR = 12; // Pixels par heure pour l'échelle
+  const GANTT_WIDTH_PX = TOTAL_HOURS * PX_PER_HOUR; // 1584px
 
   // État local du planning
   let planningState = {
     articles: [],
     currentOFs: [],
+    plannedStops: [], // Arrêts planifiés (pauses, maintenance, etc.)
     savedPlannings: [],
     activePlanning: null,
     weekNumber: null,
     weekStart: null,
     editingOFId: null,
-    draggedOFId: null
+    dragData: null
   };
 
-  // Intervalle pour le marqueur temps réel
   let nowMarkerInterval = null;
 
   // ==========================================
@@ -32,7 +32,7 @@ const PlanningModule = (function() {
 
   function loadPlanningState() {
     try {
-      const saved = localStorage.getItem('planning_v3');
+      const saved = localStorage.getItem('planning_v4');
       if (saved) {
         const data = JSON.parse(saved);
         planningState = { ...planningState, ...data };
@@ -47,18 +47,23 @@ const PlanningModule = (function() {
 
   function savePlanningState() {
     try {
-      localStorage.setItem('planning_v3', JSON.stringify(planningState));
+      localStorage.setItem('planning_v4', JSON.stringify(planningState));
     } catch (e) {
       console.error('Erreur sauvegarde planning:', e);
     }
   }
 
+  // Correction du calcul du lundi - Utilise getDay() correctement
   function getMonday(date = new Date()) {
     const d = new Date(date);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    d.setDate(diff);
     d.setHours(0, 0, 0, 0);
+    const dayOfWeek = d.getDay(); // 0 = Dimanche, 1 = Lundi, ..., 6 = Samedi
+    
+    // Si dimanche (0), reculer de 6 jours pour avoir lundi précédent
+    // Sinon, reculer de (dayOfWeek - 1) jours
+    const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    d.setDate(d.getDate() - daysToSubtract);
+    
     return d;
   }
 
@@ -71,18 +76,33 @@ const PlanningModule = (function() {
   }
 
   function setCurrentWeek() {
-    const monday = getMonday();
-    planningState.weekStart = monday.toISOString().split('T')[0];
+    const monday = getMonday(new Date());
+    planningState.weekStart = formatDateISO(monday);
     planningState.weekNumber = getWeekNumber(monday);
     savePlanningState();
   }
 
+  function formatDateISO(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  function formatDateFR(dateStr) {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
   function generateId() {
-    return 'of_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
   }
 
   function formatTime(hours, minutes = 0) {
-    return `${String(Math.floor(hours)).padStart(2, '0')}:${String(Math.round(minutes)).padStart(2, '0')}`;
+    const h = Math.floor(hours) % 24;
+    const m = Math.round(minutes);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
 
   function formatDuration(hours) {
@@ -103,52 +123,163 @@ const PlanningModule = (function() {
   }
 
   function positionToDayTime(hours) {
-    const day = Math.floor(hours / 24);
-    const hourOfDay = hours % 24;
+    const totalH = Math.max(0, Math.min(hours, TOTAL_HOURS));
+    const day = Math.floor(totalH / 24);
+    const hourOfDay = totalH % 24;
     const h = Math.floor(hourOfDay);
     const m = Math.round((hourOfDay - h) * 60);
     return {
-      day: Math.min(Math.max(day, 0), 5),
+      day: Math.min(day, 5),
       time: formatTime(h, m)
     };
   }
 
   function hoursToPixels(hours) {
-    return (hours / TOTAL_HOURS) * GANTT_WIDTH_PX;
+    return hours * PX_PER_HOUR;
   }
 
   function pixelsToHours(px) {
-    return (px / GANTT_WIDTH_PX) * TOTAL_HOURS;
+    return px / PX_PER_HOUR;
   }
 
-  // Obtenir la date/heure actuelle en heures depuis le début de la semaine
+  // Position actuelle en heures depuis le début de la semaine
   function getCurrentHoursInWeek() {
-    if (!planningState.weekStart) return null;
+    if (!planningState.activePlanning?.weekStart) return null;
     
     const now = new Date();
-    const weekStart = new Date(planningState.weekStart);
-    weekStart.setHours(0, 0, 0, 0);
+    const weekStartStr = planningState.activePlanning.weekStart;
+    const [y, m, d] = weekStartStr.split('-').map(Number);
+    const weekStart = new Date(y, m - 1, d, 0, 0, 0, 0);
     
     const diffMs = now - weekStart;
     const diffHours = diffMs / (1000 * 60 * 60);
     
-    // Si on est avant ou après la semaine, retourner null
     if (diffHours < 0 || diffHours > TOTAL_HOURS) return null;
-    
     return diffHours;
   }
 
   // ==========================================
-  // INTÉGRATION AVEC ARRÊTS (app.js state.arrets)
+  // ARRÊTS PLANIFIÉS
   // ==========================================
 
-  function getArretsPlanifies() {
+  function renderPlannedStopsList() {
+    const container = document.getElementById('plannedStopsList');
+    if (!container) return;
+
+    const stops = planningState.plannedStops || [];
+    
+    if (stops.length === 0) {
+      container.innerHTML = '<p class="helper-text">Aucun arrêt planifié.</p>';
+      return;
+    }
+
+    container.innerHTML = stops.map(stop => `
+      <div class="stop-card" data-id="${stop.id}">
+        <div class="stop-card-info">
+          <div class="stop-card-type">${stop.type}</div>
+          <div class="stop-card-details">
+            ${stop.line === 'ALL' ? 'Toutes lignes' : stop.line} • 
+            ${stop.dayPattern === 'ALL' ? 'Tous les jours' : DAYS[stop.dayPattern]} • 
+            ${stop.startTime} - ${formatDuration(stop.duration / 60)}
+          </div>
+          ${stop.comment ? `<div class="stop-card-comment">${stop.comment}</div>` : ''}
+        </div>
+        <button class="danger-btn btn-delete-stop" data-id="${stop.id}">🗑️</button>
+      </div>
+    `).join('');
+
+    container.querySelectorAll('.btn-delete-stop').forEach(btn => {
+      btn.addEventListener('click', () => deletePlannedStop(btn.dataset.id));
+    });
+  }
+
+  function addPlannedStop() {
+    const type = document.getElementById('plannedStopType')?.value || 'Pause';
+    const line = document.getElementById('plannedStopLine')?.value || 'ALL';
+    const dayPattern = document.getElementById('plannedStopDay')?.value || 'ALL';
+    const startTime = document.getElementById('plannedStopStart')?.value || '12:00';
+    const durationMin = parseInt(document.getElementById('plannedStopDuration')?.value) || 30;
+    const comment = document.getElementById('plannedStopComment')?.value || '';
+
+    const stop = {
+      id: 'stop_' + generateId(),
+      type,
+      line,
+      dayPattern,
+      startTime,
+      duration: durationMin,
+      comment
+    };
+
+    planningState.plannedStops = planningState.plannedStops || [];
+    planningState.plannedStops.push(stop);
+    savePlanningState();
+    
+    renderPlannedStopsList();
+    renderPreviewGantt();
+    
+    // Reset form
+    document.getElementById('plannedStopComment').value = '';
+  }
+
+  function deletePlannedStop(id) {
+    planningState.plannedStops = (planningState.plannedStops || []).filter(s => s.id !== id);
+    savePlanningState();
+    renderPlannedStopsList();
+    renderPreviewGantt();
+  }
+
+  // Obtenir les arrêts planifiés pour un jour donné
+  function getPlannedStopsForGantt() {
+    const stops = planningState.plannedStops || [];
+    const result = [];
+    
+    for (let dayIdx = 0; dayIdx < 6; dayIdx++) {
+      stops.forEach(stop => {
+        if (stop.dayPattern === 'ALL' || parseInt(stop.dayPattern) === dayIdx) {
+          const [h, m] = stop.startTime.split(':').map(Number);
+          const startHours = dayIdx * 24 + h + m / 60;
+          const durationHours = stop.duration / 60;
+          
+          // Pour samedi, vérifier qu'on ne dépasse pas 12h
+          if (dayIdx === 5 && startHours >= 5 * 24 + 12) return;
+          
+          const lines = stop.line === 'ALL' 
+            ? (window.LINES || ['Râpé', 'T2', 'OMORI', 'T1', 'Emballage', 'Dés', 'Filets', 'Prédécoupé'])
+            : [stop.line];
+          
+          lines.forEach(line => {
+            result.push({
+              id: `${stop.id}_${dayIdx}_${line}`,
+              type: 'stop',
+              stopType: stop.type,
+              line,
+              startHours,
+              duration: durationHours,
+              label: stop.type,
+              comment: stop.comment
+            });
+          });
+        }
+      });
+    }
+    
+    return result;
+  }
+
+  // ==========================================
+  // INTÉGRATION ARRÊTS NON PRÉVUS (app.js)
+  // ==========================================
+
+  function getUnplannedStops() {
     const arrets = [];
     
-    // Récupérer les arrêts depuis l'état global (app.js)
-    if (window.state && window.state.arrets && Array.isArray(window.state.arrets)) {
-      const weekStart = new Date(planningState.weekStart || new Date());
-      weekStart.setHours(0, 0, 0, 0);
+    if (window.state?.arrets && Array.isArray(window.state.arrets)) {
+      const weekStartStr = planningState.activePlanning?.weekStart || planningState.weekStart;
+      if (!weekStartStr) return arrets;
+      
+      const [y, m, d] = weekStartStr.split('-').map(Number);
+      const weekStart = new Date(y, m - 1, d, 0, 0, 0, 0);
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekEnd.getDate() + 5);
       weekEnd.setHours(12, 0, 0, 0);
@@ -162,12 +293,12 @@ const PlanningModule = (function() {
           const durationHours = (arret.duration || 30) / 60;
 
           arrets.push({
-            id: 'arret_' + arret.dateTime,
-            type: 'arret',
+            id: 'unplanned_' + arret.dateTime,
+            type: 'unplanned',
             line: arret.line,
             startHours,
             duration: durationHours,
-            label: arret.sousZone || arret.comment || 'Arrêt',
+            label: arret.sousZone || 'Arrêt imprévu',
             comment: arret.comment || ''
           });
         }
@@ -178,19 +309,21 @@ const PlanningModule = (function() {
   }
 
   // ==========================================
-  // INTÉGRATION AVEC PRODUCTION (app.js state.production)
+  // INTÉGRATION PRODUCTION (app.js)
   // ==========================================
 
   function updateOFsFromProduction() {
-    if (!planningState.activePlanning || !window.state || !window.state.production) return;
+    if (!planningState.activePlanning || !window.state?.production) return;
 
-    const weekStart = new Date(planningState.weekStart || new Date());
-    weekStart.setHours(0, 0, 0, 0);
+    const weekStartStr = planningState.activePlanning.weekStart;
+    if (!weekStartStr) return;
+    
+    const [y, m, d] = weekStartStr.split('-').map(Number);
+    const weekStart = new Date(y, m - 1, d, 0, 0, 0, 0);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 5);
     weekEnd.setHours(12, 0, 0, 0);
 
-    // Pour chaque ligne, récupérer la production
     planningState.activePlanning.ofs.forEach(of => {
       const lineProduction = window.state.production[of.line] || [];
       let totalProduced = 0;
@@ -198,16 +331,11 @@ const PlanningModule = (function() {
       lineProduction.forEach(prod => {
         const prodDate = new Date(prod.dateTime);
         if (prodDate >= weekStart && prodDate <= weekEnd) {
-          // Vérifier si cette production correspond à cet OF (par article ou par créneau horaire)
           const prodHours = (prodDate - weekStart) / (1000 * 60 * 60);
           const ofEnd = of.startHours + of.duration;
 
-          // Si la production est dans le créneau de l'OF
-          if (prodHours >= of.startHours && prodHours <= ofEnd) {
-            totalProduced += Number(prod.quantity) || 0;
-          }
-          // Ou si l'article correspond
-          else if (prod.article && prod.article.toUpperCase() === of.articleCode.toUpperCase()) {
+          if ((prodHours >= of.startHours && prodHours <= ofEnd) ||
+              (prod.article && prod.article.toUpperCase() === of.articleCode.toUpperCase())) {
             totalProduced += Number(prod.quantity) || 0;
           }
         }
@@ -215,7 +343,6 @@ const PlanningModule = (function() {
 
       of.produced = totalProduced;
 
-      // Mettre à jour le statut automatiquement
       if (totalProduced >= of.quantity) {
         of.status = 'done';
       } else if (totalProduced > 0) {
@@ -227,17 +354,16 @@ const PlanningModule = (function() {
   }
 
   // ==========================================
-  // GESTION DES CONFLITS ET CRÉNEAUX
+  // CONFLITS ET CRÉNEAUX
   // ==========================================
 
   function findNextAvailableSlot(line, duration, startFromHours = 6) {
     const ofs = planningState.currentOFs.filter(of => of.line === line);
-    const arrets = getArretsPlanifies().filter(a => a.line === line);
+    const plannedStops = getPlannedStopsForGantt().filter(s => s.line === line);
     
-    // Combiner OFs et arrêts
     const occupied = [
       ...ofs.map(of => ({ start: of.startHours, end: of.startHours + of.duration })),
-      ...arrets.map(a => ({ start: a.startHours, end: a.startHours + a.duration }))
+      ...plannedStops.map(s => ({ start: s.startHours, end: s.startHours + s.duration }))
     ].sort((a, b) => a.start - b.start);
 
     let cursor = startFromHours;
@@ -257,26 +383,13 @@ const PlanningModule = (function() {
   }
 
   function checkConflict(line, startHours, duration, excludeId = null) {
-    const ofs = planningState.currentOFs.filter(of => 
-      of.line === line && of.id !== excludeId
-    );
-    const arrets = getArretsPlanifies().filter(a => a.line === line);
-    
+    const ofs = planningState.currentOFs.filter(of => of.line === line && of.id !== excludeId);
     const endHours = startHours + duration;
     
-    // Vérifier conflits avec autres OFs
     for (const of of ofs) {
       const ofEnd = of.startHours + of.duration;
       if (startHours < ofEnd && endHours > of.startHours) {
         return { conflict: true, with: 'OF', item: of };
-      }
-    }
-
-    // Vérifier conflits avec arrêts
-    for (const arret of arrets) {
-      const arretEnd = arret.startHours + arret.duration;
-      if (startHours < arretEnd && endHours > arret.startHours) {
-        return { conflict: true, with: 'Arrêt', item: arret };
       }
     }
 
@@ -325,17 +438,11 @@ const PlanningModule = (function() {
   }
 
   function addOrUpdateArticle() {
-    const codeEl = document.getElementById('planningArticleCode');
-    const labelEl = document.getElementById('planningArticleLabel');
-    const lineEl = document.getElementById('planningArticleLine');
-    const cadenceEl = document.getElementById('planningArticleCadence');
-    const poidsEl = document.getElementById('planningArticlePoids');
-    
-    const code = codeEl?.value?.trim()?.toUpperCase() || '';
-    const label = labelEl?.value?.trim() || '';
-    const line = lineEl?.value || '';
-    const cadence = parseFloat(cadenceEl?.value) || 0;
-    const poids = parseFloat(poidsEl?.value) || 0;
+    const code = document.getElementById('planningArticleCode')?.value?.trim()?.toUpperCase() || '';
+    const label = document.getElementById('planningArticleLabel')?.value?.trim() || '';
+    const line = document.getElementById('planningArticleLine')?.value || '';
+    const cadence = parseFloat(document.getElementById('planningArticleCadence')?.value) || 0;
+    const poids = parseFloat(document.getElementById('planningArticlePoids')?.value) || 0;
 
     if (!code || !label || !line || cadence <= 0) {
       alert('Veuillez remplir tous les champs obligatoires.');
@@ -420,11 +527,8 @@ const PlanningModule = (function() {
       return;
     }
 
-    const line = option.dataset.line;
-    const cadence = option.dataset.cadence;
-
-    document.getElementById('planningOFLine').value = line;
-    document.getElementById('planningOFCadence').value = cadence;
+    document.getElementById('planningOFLine').value = option.dataset.line;
+    document.getElementById('planningOFCadence').value = option.dataset.cadence;
 
     updateOFPreview();
     suggestNextSlot();
@@ -527,7 +631,7 @@ const PlanningModule = (function() {
     }
 
     const of = {
-      id: generateId(),
+      id: 'of_' + generateId(),
       articleCode,
       articleLabel: article.label,
       line,
@@ -570,10 +674,7 @@ const PlanningModule = (function() {
       return;
     }
 
-    const sorted = [...planningState.currentOFs].sort((a, b) => {
-      if (a.line !== b.line) return a.line.localeCompare(b.line);
-      return a.startHours - b.startHours;
-    });
+    const sorted = [...planningState.currentOFs].sort((a, b) => a.startHours - b.startHours);
 
     container.innerHTML = sorted.map(of => {
       const endPos = positionToDayTime(of.startHours + of.duration);
@@ -662,14 +763,11 @@ const PlanningModule = (function() {
     const newTime = document.getElementById('planningEditOFStart').value;
     const newStatus = document.getElementById('planningEditOFStatus').value;
 
-    const newDuration = calculateDuration(newQty, of.cadence);
-    const newStartHours = getPositionHours(newDay, newTime);
-
     of.quantity = newQty;
-    of.duration = newDuration;
+    of.duration = calculateDuration(newQty, of.cadence);
     of.day = newDay;
     of.startTime = newTime;
-    of.startHours = newStartHours;
+    of.startHours = getPositionHours(newDay, newTime);
     of.status = newStatus;
 
     savePlanningState();
@@ -690,7 +788,6 @@ const PlanningModule = (function() {
     if (!id || !confirm('Supprimer cet OF ?')) return;
 
     planningState.currentOFs = planningState.currentOFs.filter(o => o.id !== id);
-    
     if (planningState.activePlanning) {
       planningState.activePlanning.ofs = planningState.activePlanning.ofs.filter(o => o.id !== id);
     }
@@ -708,86 +805,79 @@ const PlanningModule = (function() {
   // DRAG AND DROP
   // ==========================================
 
-  function handleDragStart(e, ofId) {
-    planningState.draggedOFId = ofId;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', ofId);
-    e.target.classList.add('dragging');
+  function initDragDrop(container, isActive) {
+    container.querySelectorAll('.gantt-of-block[data-draggable="true"]').forEach(block => {
+      block.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return; // Left click only
+        
+        const ofId = block.dataset.ofId;
+        const rect = block.getBoundingClientRect();
+        const containerRect = block.closest('.gantt-line-track').getBoundingClientRect();
+        
+        planningState.dragData = {
+          ofId,
+          startX: e.clientX,
+          originalLeft: block.offsetLeft,
+          block,
+          isActive,
+          containerWidth: containerRect.width
+        };
+        
+        block.classList.add('dragging');
+        document.addEventListener('mousemove', handleDragMove);
+        document.addEventListener('mouseup', handleDragEnd);
+        e.preventDefault();
+      });
+    });
+  }
+
+  function handleDragMove(e) {
+    if (!planningState.dragData) return;
+    
+    const { block, startX, originalLeft, containerWidth } = planningState.dragData;
+    const deltaX = e.clientX - startX;
+    let newLeft = originalLeft + deltaX;
+    
+    // Limiter au conteneur
+    newLeft = Math.max(0, Math.min(newLeft, containerWidth - block.offsetWidth));
+    
+    block.style.left = newLeft + 'px';
   }
 
   function handleDragEnd(e) {
-    planningState.draggedOFId = null;
-    e.target.classList.remove('dragging');
-    document.querySelectorAll('.gantt-line-blocks').forEach(el => {
-      el.classList.remove('drag-over');
-    });
-  }
-
-  function handleDragOver(e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    e.currentTarget.classList.add('drag-over');
-  }
-
-  function handleDragLeave(e) {
-    e.currentTarget.classList.remove('drag-over');
-  }
-
-  function handleDrop(e, targetLine) {
-    e.preventDefault();
-    e.currentTarget.classList.remove('drag-over');
+    if (!planningState.dragData) return;
     
-    const ofId = planningState.draggedOFId;
-    if (!ofId) return;
-
+    const { ofId, block, isActive, containerWidth } = planningState.dragData;
+    
+    document.removeEventListener('mousemove', handleDragMove);
+    document.removeEventListener('mouseup', handleDragEnd);
+    
+    block.classList.remove('dragging');
+    
     // Calculer la nouvelle position en heures
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const newStartHours = pixelsToHours(x);
-
-    // Arrondir à 15 minutes
+    const newLeft = parseInt(block.style.left) || 0;
+    const newStartHours = pixelsToHours(newLeft);
+    
+    // Arrondir à 15 minutes (0.25h)
     const roundedHours = Math.round(newStartHours * 4) / 4;
-
-    // Trouver l'OF
-    let of = planningState.currentOFs.find(o => o.id === ofId);
-    let isActive = false;
     
-    if (!of && planningState.activePlanning) {
-      of = planningState.activePlanning.ofs.find(o => o.id === ofId);
-      isActive = true;
+    // Trouver et mettre à jour l'OF
+    let of = isActive 
+      ? planningState.activePlanning?.ofs.find(o => o.id === ofId)
+      : planningState.currentOFs.find(o => o.id === ofId);
+    
+    if (of && roundedHours >= 0 && roundedHours + of.duration <= TOTAL_HOURS) {
+      of.startHours = roundedHours;
+      const dayTime = positionToDayTime(roundedHours);
+      of.day = dayTime.day;
+      of.startTime = dayTime.time;
+      
+      savePlanningState();
     }
     
-    if (!of) return;
-
-    // Vérifier les conflits (exclure l'OF qu'on déplace)
-    const ofsToCheck = isActive ? planningState.activePlanning.ofs : planningState.currentOFs;
-    const conflict = ofsToCheck.some(other => {
-      if (other.id === ofId) return false;
-      if (other.line !== targetLine) return false;
-      const otherEnd = other.startHours + other.duration;
-      return roundedHours < otherEnd && (roundedHours + of.duration) > other.startHours;
-    });
-
-    if (conflict) {
-      alert('Position occupée par un autre OF !');
-      return;
-    }
-
-    // Vérifier les limites
-    if (roundedHours < 0 || roundedHours + of.duration > TOTAL_HOURS) {
-      alert('Position hors limites !');
-      return;
-    }
-
-    // Mettre à jour l'OF
-    of.line = targetLine;
-    of.startHours = roundedHours;
-    const dayTime = positionToDayTime(roundedHours);
-    of.day = dayTime.day;
-    of.startTime = dayTime.time;
-
-    savePlanningState();
+    planningState.dragData = null;
     
+    // Rafraîchir
     if (isActive) {
       renderActiveGantt();
       renderActiveOFList();
@@ -799,124 +889,143 @@ const PlanningModule = (function() {
   }
 
   // ==========================================
-  // GANTT CHART AMÉLIORÉ
+  // GANTT CHART - VERSION CORRIGÉE
   // ==========================================
 
   function renderGantt(containerId, ofs, interactive = false) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // Récupérer les lignes depuis l'état global
     const lines = window.LINES || ['Râpé', 'T2', 'OMORI', 'T1', 'Emballage', 'Dés', 'Filets', 'Prédécoupé'];
+    const plannedStops = getPlannedStopsForGantt();
+    const unplannedStops = interactive ? getUnplannedStops() : [];
+    const allStops = [...plannedStops, ...unplannedStops];
     
-    // Récupérer les arrêts
-    const arrets = interactive ? getArretsPlanifies() : [];
-    
-    // Si planning actif, mettre à jour depuis la production
     if (interactive && planningState.activePlanning) {
       updateOFsFromProduction();
     }
 
-    if (!ofs || ofs.length === 0) {
+    if ((!ofs || ofs.length === 0) && allStops.length === 0) {
       container.innerHTML = `<div class="gantt-empty">${
         containerId === 'planningGantt' 
-          ? 'Sélectionnez un planning pour l\'afficher'
-          : 'Ajoutez des OFs pour voir la prévisualisation'
+          ? 'Sélectionnez un planning'
+          : 'Ajoutez des OFs'
       }</div>`;
       return;
     }
 
-    // Filtrer les lignes avec des OFs ou des arrêts
+    // Filtrer les lignes avec contenu
     const usedLines = [...new Set([
-      ...ofs.map(of => of.line),
-      ...arrets.map(a => a.line)
+      ...(ofs || []).map(of => of.line),
+      ...allStops.map(s => s.line)
     ])];
-
-    // Trier les lignes selon l'ordre original
     const sortedLines = lines.filter(l => usedLines.includes(l));
+    if (sortedLines.length === 0) {
+      sortedLines.push(...lines.slice(0, 3));
+    }
 
-    let html = `<div class="gantt-chart-v3" style="min-width: ${GANTT_WIDTH_PX + 140}px">`;
+    let html = `<div class="gantt-wrapper-v4" style="width: ${GANTT_WIDTH_PX + 130}px">`;
     
-    // En-tête avec jours et heures
-    html += '<div class="gantt-header-v3">';
-    html += '<div class="gantt-corner">Lignes</div>';
-    html += '<div class="gantt-time-header">';
+    // En-tête avec jours
+    html += '<div class="gantt-header-v4">';
+    html += '<div class="gantt-corner-v4">Lignes</div>';
+    html += '<div class="gantt-timeline-header" style="width: ' + GANTT_WIDTH_PX + 'px">';
     
-    // Jours
-    DAYS.forEach((day, idx) => {
-      const dayHours = idx < 5 ? 24 : 12;
+    // Labels des jours
+    for (let d = 0; d < 6; d++) {
+      const dayHours = d < 5 ? 24 : 12;
+      const left = hoursToPixels(d * 24);
       const width = hoursToPixels(dayHours);
-      const left = hoursToPixels(idx * 24);
-      html += `<div class="gantt-day-label" style="left: ${left}px; width: ${width}px">${day}</div>`;
-    });
+      html += `<div class="gantt-day-header-v4" style="left:${left}px;width:${width}px">${DAYS[d]}</div>`;
+    }
     
-    // Heures (tous les 6h)
+    // Graduation des heures
+    html += '<div class="gantt-hours-row">';
     for (let h = 0; h <= TOTAL_HOURS; h += 6) {
       const left = hoursToPixels(h);
       const hourOfDay = h % 24;
-      html += `<div class="gantt-hour-tick" style="left: ${left}px">${String(hourOfDay).padStart(2, '0')}h</div>`;
+      html += `<span class="gantt-hour-label" style="left:${left}px">${String(hourOfDay).padStart(2,'0')}h</span>`;
     }
+    html += '</div>';
     
     html += '</div></div>';
 
     // Lignes du Gantt
     sortedLines.forEach(line => {
-      const lineOFs = ofs.filter(of => of.line === line);
-      const lineArrets = arrets.filter(a => a.line === line);
+      const lineOFs = (ofs || []).filter(of => of.line === line);
+      const lineStops = allStops.filter(s => s.line === line);
       
-      html += `<div class="gantt-row-v3">`;
-      html += `<div class="gantt-line-label-v3">${line}</div>`;
-      html += `<div class="gantt-line-blocks-v3" data-line="${line}">`;
+      html += `<div class="gantt-row-v4">`;
+      html += `<div class="gantt-line-name-v4">${line}</div>`;
+      html += `<div class="gantt-line-track" data-line="${line}" style="width: ${GANTT_WIDTH_PX}px">`;
       
-      // Grille de fond (jours)
+      // Grille de fond avec lignes verticales pour chaque heure
+      for (let h = 0; h <= TOTAL_HOURS; h += 6) {
+        const left = hoursToPixels(h);
+        html += `<div class="gantt-grid-line" style="left:${left}px"></div>`;
+      }
+      
+      // Fond alterné par jour
       for (let d = 0; d < 6; d++) {
         const left = hoursToPixels(d * 24);
         const width = hoursToPixels(d < 5 ? 24 : 12);
-        html += `<div class="gantt-day-bg ${d % 2 === 0 ? 'even' : 'odd'}" style="left: ${left}px; width: ${width}px"></div>`;
+        html += `<div class="gantt-day-bg-v4 ${d % 2 === 0 ? 'even' : ''}" style="left:${left}px;width:${width}px"></div>`;
       }
       
       // Marqueur "maintenant"
-      const nowHours = getCurrentHoursInWeek();
-      if (interactive && nowHours !== null && nowHours >= 0 && nowHours <= TOTAL_HOURS) {
-        const nowLeft = hoursToPixels(nowHours);
-        html += `<div class="gantt-now-marker" style="left: ${nowLeft}px" data-now-marker></div>`;
+      if (interactive) {
+        const nowHours = getCurrentHoursInWeek();
+        if (nowHours !== null && nowHours >= 0 && nowHours <= TOTAL_HOURS) {
+          const nowLeft = hoursToPixels(nowHours);
+          html += `<div class="gantt-now-line" style="left:${nowLeft}px"><span class="now-label">Maintenant</span></div>`;
+        }
       }
       
-      // Arrêts
-      lineArrets.forEach(arret => {
-        const left = hoursToPixels(arret.startHours);
-        const width = Math.max(hoursToPixels(arret.duration), 20);
-        html += `<div class="gantt-block-v3 stop" style="left: ${left}px; width: ${width}px">
-          <div class="gantt-block-title">🛑 ${arret.label}</div>
-          <div class="gantt-block-meta">${formatDuration(arret.duration)}</div>
+      // Arrêts planifiés
+      lineStops.filter(s => s.type === 'stop').forEach(stop => {
+        const left = hoursToPixels(stop.startHours);
+        const width = Math.max(hoursToPixels(stop.duration), 30);
+        html += `<div class="gantt-stop-block planned" style="left:${left}px;width:${width}px">
+          <span class="stop-icon">⏸️</span>
+          <span class="stop-label">${stop.label}</span>
+        </div>`;
+      });
+      
+      // Arrêts imprévus
+      lineStops.filter(s => s.type === 'unplanned').forEach(stop => {
+        const left = hoursToPixels(stop.startHours);
+        const width = Math.max(hoursToPixels(stop.duration), 30);
+        html += `<div class="gantt-stop-block unplanned" style="left:${left}px;width:${width}px">
+          <span class="stop-icon">🛑</span>
+          <span class="stop-label">${stop.label}</span>
         </div>`;
       });
       
       // OFs
       lineOFs.forEach(of => {
         const left = hoursToPixels(of.startHours);
-        const width = Math.max(hoursToPixels(of.duration), 40);
+        const width = Math.max(hoursToPixels(of.duration), 50);
         const endPos = positionToDayTime(of.startHours + of.duration);
         const progress = of.quantity > 0 ? Math.min(100, (of.produced || 0) / of.quantity * 100) : 0;
         
-        // Déterminer le statut visuel
+        // Statut visuel
         let statusClass = of.status;
-        if (interactive && nowHours !== null) {
-          if (of.status !== 'done' && of.startHours + of.duration < nowHours && progress < 100) {
+        if (interactive) {
+          const nowHours = getCurrentHoursInWeek();
+          if (nowHours !== null && of.status !== 'done' && of.startHours + of.duration < nowHours && progress < 100) {
             statusClass = 'late';
           }
         }
         
-        html += `<div class="gantt-block-v3 ${statusClass}" 
-          style="left: ${left}px; width: ${width}px"
+        html += `<div class="gantt-of-block ${statusClass}" 
+          style="left:${left}px;width:${width}px"
           data-of-id="${of.id}"
-          ${interactive ? 'draggable="true"' : ''}>
-          ${progress > 0 ? `<div class="gantt-progress" style="width: ${progress}%"></div>` : ''}
-          <div class="gantt-block-content">
-            <div class="gantt-block-title">${of.articleCode}</div>
-            <div class="gantt-block-meta">${of.quantity} colis</div>
-            <div class="gantt-block-time">${of.startTime} → ${endPos.time}</div>
-            ${of.produced > 0 ? `<div class="gantt-block-produced">✓ ${of.produced}</div>` : ''}
+          data-draggable="${interactive}">
+          ${progress > 0 ? `<div class="gantt-progress-bar" style="width:${progress}%"></div>` : ''}
+          <div class="gantt-of-content">
+            <div class="gantt-of-code">${of.articleCode}</div>
+            <div class="gantt-of-qty">${of.quantity} colis</div>
+            <div class="gantt-of-time">${of.startTime}→${endPos.time}</div>
           </div>
         </div>`;
       });
@@ -927,22 +1036,18 @@ const PlanningModule = (function() {
     html += '</div>';
     container.innerHTML = html;
 
-    // Ajouter les event listeners
+    // Initialiser le drag & drop
     if (interactive) {
-      // Drag & Drop
-      container.querySelectorAll('.gantt-block-v3[draggable="true"]').forEach(block => {
-        const ofId = block.dataset.ofId;
-        block.addEventListener('dragstart', (e) => handleDragStart(e, ofId));
-        block.addEventListener('dragend', handleDragEnd);
-        block.addEventListener('click', () => openOFEditor(ofId));
-      });
+      initDragDrop(container, true);
       
-      container.querySelectorAll('.gantt-line-blocks-v3').forEach(lineBlocks => {
-        const line = lineBlocks.dataset.line;
-        lineBlocks.addEventListener('dragover', handleDragOver);
-        lineBlocks.addEventListener('dragleave', handleDragLeave);
-        lineBlocks.addEventListener('drop', (e) => handleDrop(e, line));
+      // Click pour éditer
+      container.querySelectorAll('.gantt-of-block').forEach(block => {
+        block.addEventListener('dblclick', () => {
+          openOFEditor(block.dataset.ofId);
+        });
       });
+    } else {
+      initDragDrop(container, false);
     }
   }
 
@@ -954,21 +1059,20 @@ const PlanningModule = (function() {
     if (!planningState.activePlanning) {
       const container = document.getElementById('planningGantt');
       if (container) {
-        container.innerHTML = '<div class="gantt-empty">Sélectionnez un planning pour l\'afficher</div>';
+        container.innerHTML = '<div class="gantt-empty">Sélectionnez un planning</div>';
       }
       return;
     }
     renderGantt('planningGantt', planningState.activePlanning.ofs, true);
   }
 
-  // Mettre à jour le marqueur "maintenant" en temps réel
   function updateNowMarkers() {
     const nowHours = getCurrentHoursInWeek();
     if (nowHours === null) return;
-
-    document.querySelectorAll('[data-now-marker]').forEach(marker => {
+    
+    document.querySelectorAll('.gantt-now-line').forEach(marker => {
       const left = hoursToPixels(nowHours);
-      marker.style.left = `${left}px`;
+      marker.style.left = left + 'px';
     });
   }
 
@@ -1001,7 +1105,8 @@ const PlanningModule = (function() {
       weekNumber: parseInt(weekNum),
       weekStart,
       createdAt: new Date().toISOString(),
-      ofs: JSON.parse(JSON.stringify(planningState.currentOFs))
+      ofs: JSON.parse(JSON.stringify(planningState.currentOFs)),
+      plannedStops: JSON.parse(JSON.stringify(planningState.plannedStops || []))
     };
 
     if (existingIdx >= 0) {
@@ -1027,7 +1132,7 @@ const PlanningModule = (function() {
     select.innerHTML = '<option value="">-- Sélectionner --</option>' +
       planningState.savedPlannings
         .sort((a, b) => b.weekNumber - a.weekNumber)
-        .map(p => `<option value="${p.id}">Semaine ${p.weekNumber} (${p.weekStart})</option>`)
+        .map(p => `<option value="${p.id}">Semaine ${p.weekNumber} (${formatDateFR(p.weekStart)})</option>`)
         .join('');
   }
 
@@ -1044,12 +1149,13 @@ const PlanningModule = (function() {
     if (!planning) return;
 
     planningState.activePlanning = JSON.parse(JSON.stringify(planning));
-    planningState.weekNumber = planning.weekNumber;
-    planningState.weekStart = planning.weekStart;
     
-    // Mettre à jour depuis la production
+    // Restaurer les arrêts planifiés du planning
+    if (planning.plannedStops) {
+      planningState.plannedStops = JSON.parse(JSON.stringify(planning.plannedStops));
+    }
+    
     updateOFsFromProduction();
-    
     savePlanningState();
 
     const activeInfo = document.getElementById('planningActiveInfo');
@@ -1060,14 +1166,12 @@ const PlanningModule = (function() {
     renderActiveGantt();
     renderActiveOFList();
     updateDelays();
-    
-    // Démarrer le timer pour le marqueur temps réel
     startNowMarkerTimer();
   }
 
   function startNowMarkerTimer() {
     if (nowMarkerInterval) clearInterval(nowMarkerInterval);
-    nowMarkerInterval = setInterval(updateNowMarkers, 60000); // Mise à jour toutes les minutes
+    nowMarkerInterval = setInterval(updateNowMarkers, 60000);
   }
 
   function renderActiveOFList() {
@@ -1124,7 +1228,6 @@ const PlanningModule = (function() {
       return;
     }
 
-    // Mettre à jour depuis la production
     updateOFsFromProduction();
 
     const lines = [...new Set(planningState.activePlanning.ofs.map(of => of.line))];
@@ -1141,13 +1244,11 @@ const PlanningModule = (function() {
         totalPlanned += of.quantity;
         totalProduced += of.produced || 0;
         
-        // Calcul de l'attendu
         const ofEnd = of.startHours + of.duration;
         if (nowHours >= ofEnd) {
           totalExpected += of.quantity;
         } else if (nowHours > of.startHours) {
-          const elapsed = nowHours - of.startHours;
-          const ratio = elapsed / of.duration;
+          const ratio = (nowHours - of.startHours) / of.duration;
           totalExpected += Math.round(of.quantity * ratio);
         }
       });
@@ -1155,7 +1256,6 @@ const PlanningModule = (function() {
       const delta = totalProduced - totalExpected;
       const deltaClass = delta > 0 ? 'positive' : delta < 0 ? 'negative' : 'neutral';
       const deltaText = delta > 0 ? `+${delta}` : delta.toString();
-      const pct = totalExpected > 0 ? Math.round(totalProduced / totalExpected * 100) : 0;
 
       return `
         <div class="delay-card-new">
@@ -1175,7 +1275,7 @@ const PlanningModule = (function() {
             </div>
             <div class="delay-stat">
               <span class="delay-stat-label">Écart</span>
-              <span class="delay-stat-value ${deltaClass}">${deltaText} (${pct}%)</span>
+              <span class="delay-stat-value ${deltaClass}">${deltaText}</span>
             </div>
           </div>
         </div>
@@ -1190,10 +1290,15 @@ const PlanningModule = (function() {
   function initLineSelects() {
     const lines = window.LINES || ['Râpé', 'T2', 'OMORI', 'T1', 'Emballage', 'Dés', 'Filets', 'Prédécoupé'];
     
-    ['planningArticleLine', 'planningOFLine'].forEach(id => {
+    ['planningArticleLine', 'planningOFLine', 'plannedStopLine'].forEach(id => {
       const select = document.getElementById(id);
       if (select) {
-        select.innerHTML = lines.map(l => `<option value="${l}">${l}</option>`).join('');
+        if (id === 'plannedStopLine') {
+          select.innerHTML = '<option value="ALL">Toutes les lignes</option>' + 
+            lines.map(l => `<option value="${l}">${l}</option>`).join('');
+        } else {
+          select.innerHTML = lines.map(l => `<option value="${l}">${l}</option>`).join('');
+        }
       }
     });
   }
@@ -1201,6 +1306,10 @@ const PlanningModule = (function() {
   function initWeekInputs() {
     const weekNumInput = document.getElementById('planningWeekNumber');
     const weekStartInput = document.getElementById('planningWeekStart');
+
+    if (!planningState.weekNumber || !planningState.weekStart) {
+      setCurrentWeek();
+    }
 
     if (weekNumInput) weekNumInput.value = planningState.weekNumber || '';
     if (weekStartInput) weekStartInput.value = planningState.weekStart || '';
@@ -1218,7 +1327,6 @@ const PlanningModule = (function() {
           p.classList.toggle('hidden', p.id !== `planning-tab-${tab}`)
         );
         
-        // Rafraîchir le Gantt actif quand on va sur l'onglet
         if (tab === 'run') {
           updateOFsFromProduction();
           renderActiveGantt();
@@ -1249,6 +1357,9 @@ const PlanningModule = (function() {
     document.getElementById('planningOFSuggestBtn')?.addEventListener('click', autoPlaceOF);
     document.getElementById('planningClearAllOFBtn')?.addEventListener('click', clearAllOFs);
 
+    // Arrêts planifiés
+    document.getElementById('plannedStopAddBtn')?.addEventListener('click', addPlannedStop);
+
     // Validation
     document.getElementById('planningValidateBtn')?.addEventListener('click', validatePlanning);
 
@@ -1260,7 +1371,7 @@ const PlanningModule = (function() {
     document.getElementById('planningEditOFSave')?.addEventListener('click', saveOFEdit);
     document.getElementById('planningEditOFDelete')?.addEventListener('click', deleteOFFromEditor);
 
-    // Sauvegarder semaine
+    // Semaine
     document.getElementById('planningWeekNumber')?.addEventListener('change', (e) => {
       planningState.weekNumber = parseInt(e.target.value);
       savePlanningState();
@@ -1270,7 +1381,7 @@ const PlanningModule = (function() {
       savePlanningState();
     });
 
-    // Bouton rafraîchir
+    // Rafraîchir
     document.getElementById('planningRefreshBtn')?.addEventListener('click', () => {
       updateOFsFromProduction();
       renderActiveGantt();
@@ -1280,7 +1391,7 @@ const PlanningModule = (function() {
   }
 
   function init() {
-    console.log('Initialisation module Planning v3...');
+    console.log('Initialisation module Planning v4...');
     
     loadPlanningState();
     initLineSelects();
@@ -1289,6 +1400,7 @@ const PlanningModule = (function() {
     
     renderArticlesList();
     updateOFFormVisibility();
+    renderPlannedStopsList();
     renderOFList();
     renderPreviewGantt();
     updatePlanningSelect();
@@ -1305,14 +1417,13 @@ const PlanningModule = (function() {
       startNowMarkerTimer();
     }
 
-    console.log('Module Planning v3 initialisé.');
+    console.log('Module Planning v4 initialisé.');
   }
 
-  // API publique
   return {
     init,
     openOFEditor,
-    refreshFromProduction: () => {
+    refresh: () => {
       updateOFsFromProduction();
       renderActiveGantt();
       renderActiveOFList();
@@ -1322,7 +1433,4 @@ const PlanningModule = (function() {
   };
 })();
 
-// Initialiser
-document.addEventListener('DOMContentLoaded', function() {
-  setTimeout(PlanningModule.init, 500);
-});
+document.addEventListener('DOMContentLoaded', () => setTimeout(PlanningModule.init, 300));
