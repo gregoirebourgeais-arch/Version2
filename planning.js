@@ -1410,16 +1410,6 @@ const PlanningModule = (function() {
     document.getElementById('planningEditOFSave')?.addEventListener('click', saveOFEdit);
     document.getElementById('planningEditOFDelete')?.addEventListener('click', deleteOFFromEditor);
 
-    // Semaine
-    document.getElementById('planningWeekNumber')?.addEventListener('change', (e) => {
-      planningState.weekNumber = parseInt(e.target.value);
-      savePlanningState();
-    });
-    document.getElementById('planningWeekStart')?.addEventListener('change', (e) => {
-      planningState.weekStart = e.target.value;
-      savePlanningState();
-    });
-
     // Rafraîchir
     document.getElementById('planningRefreshBtn')?.addEventListener('click', () => {
       updateOFsFromProduction();
