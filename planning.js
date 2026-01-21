@@ -16,6 +16,7 @@ const PlanningModule = (function() {
     articles: [],
     currentOFs: [],
     plannedStops: [], // Arrêts planifiés (pauses, maintenance, etc.)
+    changeovers: [], // Changements (intermédiaire, format, produit, couleur)
     savedPlannings: [],
     activePlanning: null,
     weekNumber: null,
@@ -23,6 +24,14 @@ const PlanningModule = (function() {
     editingOFId: null,
     dragData: null
   };
+
+  // Types de changements disponibles
+  const CHANGEOVER_TYPES = [
+    { id: 'intermediate', label: 'Intermédiaire', duration: 15, color: '#9b59b6' },
+    { id: 'format', label: 'Format', duration: 30, color: '#3498db' },
+    { id: 'product', label: 'Produit', duration: 45, color: '#e67e22' },
+    { id: 'color', label: 'Couleur', duration: 60, color: '#1abc9c' }
+  ];
 
   let nowMarkerInterval = null;
 
