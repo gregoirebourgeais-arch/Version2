@@ -101,25 +101,16 @@ const PlanningModule = (function() {
 
   // Met à jour la date du lundi quand le numéro de semaine change
   function onWeekNumberChange() {
-    console.log('onWeekNumberChange appelé');
     const weekNumInput = document.getElementById('planningWeekNumber');
     const weekStartInput = document.getElementById('planningWeekStart');
     
-    if (!weekNumInput || !weekStartInput) {
-      console.log('Inputs non trouvés');
-      return;
-    }
+    if (!weekNumInput || !weekStartInput) return;
     
     const weekNum = parseInt(weekNumInput.value);
-    console.log('Numéro de semaine:', weekNum);
-    if (isNaN(weekNum) || weekNum < 1 || weekNum > 53) {
-      console.log('Numéro de semaine invalide');
-      return;
-    }
+    if (isNaN(weekNum) || weekNum < 1 || weekNum > 53) return;
     
     const monday = getMondayOfWeek(weekNum);
     const isoDate = formatDateISO(monday);
-    console.log('Nouveau lundi calculé:', isoDate);
     
     weekStartInput.value = isoDate;
     planningState.weekNumber = weekNum;
