@@ -1385,8 +1385,12 @@ const PlanningModule = (function() {
     document.getElementById('planningArticleClearBtn')?.addEventListener('click', clearArticleForm);
 
     // Semaine - mise à jour automatique du lundi quand le numéro de semaine change
-    document.getElementById('planningWeekNumber')?.addEventListener('change', onWeekNumberChange);
-    document.getElementById('planningWeekNumber')?.addEventListener('input', onWeekNumberChange);
+    const weekNumEl = document.getElementById('planningWeekNumber');
+    console.log('Binding planningWeekNumber:', weekNumEl ? 'FOUND' : 'NOT FOUND');
+    if (weekNumEl) {
+      weekNumEl.addEventListener('change', onWeekNumberChange);
+      weekNumEl.addEventListener('input', onWeekNumberChange);
+    }
     
     document.getElementById('planningAutoWeekBtn')?.addEventListener('click', () => {
       setCurrentWeek();
