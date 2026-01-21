@@ -1,96 +1,90 @@
-# Atelier PPNC - Production Requirements Document
+# Atelier PPNC - Product Requirements Document
 
 ## Problème Original
-Application PWA de gestion de production pour un atelier de transformation fromagère. L'utilisateur a demandé une refonte complète du module Planning inspiré de SAP, avec des fonctionnalités avancées de planification de production.
+Application PWA de gestion de production pour un atelier de transformation fromagère. L'utilisateur a demandé une refonte complète du module Planning inspiré de SAP.
 
 ## Architecture Technique
 - **Stack** : PWA statique (HTML, CSS, Vanilla JavaScript)
 - **Stockage** : localStorage (clé `planning_v4`)
 - **Fichiers principaux** :
   - `/app/index.html` - Interface utilisateur
-  - `/app/style.css` - Styles (thème sombre/clair)
-  - `/app/app.js` - Logique principale (Production, Arrêts, Manager)
+  - `/app/style.css` - Styles
+  - `/app/app.js` - Logique principale
   - `/app/planning.js` - Module Planning V4
-  - `/app/service-worker.js` - PWA
+  - `/app/frontend/` - Copie pour le serveur
 
 ## Fonctionnalités Implémentées
 
-### ✅ Module Planning V4 (Complété le 21/01/2026)
+### Module Planning V4 (Janvier 2026)
 
 #### Articles
 - CRUD complet pour les articles de production
-- Propriétés : Code, Libellé, Ligne de production, Cadence (colis/h), Poids (kg)
-- Persistance via localStorage
+- Propriétés : Code, Libellé, Ligne, Cadence (colis/h), Poids (kg)
 
-#### Création de Planning
-- Configuration semaine (numéro, date de début)
-- **Arrêts Planifiés** : Pauses, maintenance, etc.
-  - Type, Ligne (ou toutes), Jour (ou tous), Heure, Durée, Commentaire
-- **Ordres de Fabrication (OFs)** :
-  - Sélection article, quantité, jour, heure de début
-  - Calcul automatique de la durée basé sur la cadence
-  - Bouton "Placer automatiquement" pour trouver un créneau
+#### Arrêts Planifiés
+- Types : Pause, Maintenance, etc.
+- Configuration : Ligne (ou toutes), Jour (ou tous), Heure, Durée
+- **Les arrêts coupent les OFs et décalent leur fin**
+
+#### Changements (Nouveau - 21/01/2026)
+- Types : Intermédiaire (15min), Format (30min), Produit (45min), Couleur (60min)
+- Affichage sur le Gantt avec couleurs distinctes
+- Peuvent être coupés par arrêts, ne coupent pas les OFs
+
+#### Ordres de Fabrication (OFs)
+- Création avec calcul automatique de durée
+- Affichage en segments quand coupés par arrêts
+- Drag & drop (OF reste sur sa ligne)
+
+#### Diagramme de Gantt
+- Échelle : Lundi 00h → Samedi 12h (132 heures)
+- OFs en segments colorés selon statut
+- Arrêts en jaune (⏸️)
+- Changements en couleur selon type
+- Marqueur "Maintenant" en temps réel
+- Drag & drop interactif
 
 #### Planning Actif
-- Sélection et chargement d'un planning validé
-- **Diagramme de Gantt** avec :
-  - Échelle de temps précise (Lundi 00h → Samedi 12h)
-  - Blocs OFs colorés selon statut (planifié, en cours, terminé, en retard)
-  - Arrêts planifiés en orange
-  - Arrêts non planifiés (depuis app.js) en rouge
-  - **Marqueur "Maintenant"** en temps réel sur chaque ligne
-  - **Drag & Drop** pour repositionner les OFs
-  - Double-clic pour éditer un OF
-- **Table Avance/Retard** par ligne :
-  - Planifié, Attendu, Produit, Écart
+- Table Avance/Retard par ligne
+- Intégration temps réel avec Production/Arrêts (window.state)
 
-#### Intégration Temps Réel
-- Connexion avec `window.state.production` (données de production)
-- Connexion avec `window.state.arrets` (arrêts non planifiés)
-- Mise à jour automatique des statuts OFs
-- Bouton "Rafraîchir depuis Production/Arrêts"
-
-### ✅ Autres Corrections (21/01/2026)
-- **Calculatrice** : Pop-up moderne
-- **Toggle Thème** : Sombre/Clair fonctionnel
-- **Onglet Manager** : Modal mot de passe (3005)
+### Corrections antérieures
+- Calculatrice en pop-up moderne
+- Toggle thème sombre/clair
+- Calcul automatique lundi selon n° de semaine
 
 ## Credentials
 - **Mot de passe Manager** : 3005
 
-## Backlog / Tâches Futures
+## Backlog
 
-### P1 - Priorité Haute
-- [ ] Tests automatisés pour le module Planning
-- [ ] Export du planning (Excel/PDF)
+### P0 - Critique
+- [ ] Tester drag & drop manuellement
 
-### P2 - Priorité Moyenne
-- [ ] Notifications pour OFs en retard
-- [ ] Historique des plannings validés
-- [ ] Statistiques de production vs planning
+### P1 - Haute
+- [ ] Règles drag & drop changements
+- [ ] Export planning (Excel/PDF)
 
-### P3 - Améliorations
-- [ ] Mode hors-ligne amélioré (sync)
-- [ ] Import/Export de configuration articles
-- [ ] Personnalisation des lignes de production
+### P2 - Moyenne
+- [ ] Notifications OFs en retard
+- [ ] Historique plannings
+
+### P3 - Future
+- [ ] Mode hors-ligne amélioré
+- [ ] Import/Export configuration
 
 ## Notes Techniques
 
-### localStorage Keys
-- `planning_v4` : État complet du module Planning
-- `state` : État principal de l'application (app.js)
+### Calcul segments OF
+Quand un arrêt chevauche un OF :
+1. Segment 1 : OF start → arrêt start
+2. Arrêt visible entre les segments
+3. Segment 2 : arrêt end → OF end + durée arrêt
 
-### Intégration app.js ↔ planning.js
-```javascript
-// app.js expose l'état globalement
-window.state = state;
+### localStorage
+- `planning_v4` : État complet Planning
+- `state` : État app.js (exposé via window.state)
 
-// planning.js lit les données
-window.state.production  // Données de production par ligne
-window.state.arrets      // Arrêts non planifiés
-```
-
-### Configuration Gantt
-- 132 heures totales (Lundi 00h → Samedi 12h)
-- 12 pixels par heure
-- Arrondi des positions à 15 minutes
+### Service Worker
+- Cache name : `atelier-ppnc-v2`
+- Assets : index.html, style.css, app.js, planning.js
