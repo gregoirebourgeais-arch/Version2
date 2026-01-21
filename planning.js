@@ -1338,7 +1338,10 @@ const PlanningModule = (function() {
       lineStops.filter(s => s.type === 'stop').forEach(stop => {
         const left = hoursToPixels(stop.startHours);
         const width = Math.max(hoursToPixels(stop.duration), 30);
-        html += `<div class="gantt-stop-block planned" style="left:${left}px;width:${width}px">
+        html += `<div class="gantt-stop-block planned" 
+          style="left:${left}px;width:${width}px"
+          data-stop-id="${stop.id}"
+          data-draggable="${interactive}">
           <span class="stop-icon">⏸️</span>
           <span class="stop-label">${stop.label}</span>
         </div>`;
@@ -1348,39 +1351,123 @@ const PlanningModule = (function() {
       lineStops.filter(s => s.type === 'unplanned').forEach(stop => {
         const left = hoursToPixels(stop.startHours);
         const width = Math.max(hoursToPixels(stop.duration), 30);
-        html += `<div class="gantt-stop-block unplanned" style="left:${left}px;width:${width}px">
+        html += `<div class="gantt-stop-block unplanned" 
+          style="left:${left}px;width:${width}px"
+          data-stop-id="${stop.id}">
           <span class="stop-icon">🛑</span>
           <span class="stop-label">${stop.label}</span>
         </div>`;
       });
+
+      // Changeovers (changements)
+      const lineChangeovers = getChangeoversForGantt().filter(c => c.line === line);
+      lineChangeovers.forEach(co => {
+        const left = hoursToPixels(co.startHours);
+        const width = Math.max(hoursToPixels(co.duration), 30);
+        html += `<div class="gantt-changeover-block" 
+          style="left:${left}px;width:${width}px;background-color:${co.color}"
+          data-changeover-id="${co.id}"
+          data-draggable="${interactive}">
+          <span class="changeover-label">${co.label}</span>
+        </div>`;
+      });
       
-      // OFs
+      // OFs avec calcul des segments (coupés par arrêts)
       lineOFs.forEach(of => {
-        const left = hoursToPixels(of.startHours);
-        const width = Math.max(hoursToPixels(of.duration), 50);
-        const endPos = positionToDayTime(of.startHours + of.duration);
-        const progress = of.quantity > 0 ? Math.min(100, (of.produced || 0) / of.quantity * 100) : 0;
+        const ofStops = lineStops.filter(s => {
+          const stopEnd = s.startHours + s.duration;
+          const ofEnd = of.startHours + of.duration;
+          // Le stop chevauche l'OF
+          return s.startHours < ofEnd && stopEnd > of.startHours;
+        });
         
-        // Statut visuel
-        let statusClass = of.status;
-        if (interactive) {
-          const nowHours = getCurrentHoursInWeek();
-          if (nowHours !== null && of.status !== 'done' && of.startHours + of.duration < nowHours && progress < 100) {
-            statusClass = 'late';
+        // Si pas d'arrêt pendant l'OF, affichage simple
+        if (ofStops.length === 0) {
+          const left = hoursToPixels(of.startHours);
+          const width = Math.max(hoursToPixels(of.duration), 50);
+          const endPos = positionToDayTime(of.startHours + of.duration);
+          const progress = of.quantity > 0 ? Math.min(100, (of.produced || 0) / of.quantity * 100) : 0;
+          
+          let statusClass = of.status || 'planned';
+          if (interactive) {
+            const nowHours = getCurrentHoursInWeek();
+            if (nowHours !== null && of.status !== 'done' && of.startHours + of.duration < nowHours && progress < 100) {
+              statusClass = 'late';
+            }
+          }
+          
+          html += `<div class="gantt-of-block ${statusClass}" 
+            style="left:${left}px;width:${width}px"
+            data-of-id="${of.id}"
+            data-draggable="${interactive}">
+            ${progress > 0 ? `<div class="gantt-progress-bar" style="width:${progress}%"></div>` : ''}
+            <div class="gantt-of-content">
+              <div class="gantt-of-code">${of.articleCode}</div>
+              <div class="gantt-of-qty">${of.quantity} colis</div>
+              <div class="gantt-of-time">${of.startTime}→${endPos.time}</div>
+            </div>
+          </div>`;
+        } else {
+          // L'OF est coupé par des arrêts - afficher les segments
+          let currentStart = of.startHours;
+          const sortedStops = ofStops.sort((a, b) => a.startHours - b.startHours);
+          let totalPause = 0;
+          const progress = of.quantity > 0 ? Math.min(100, (of.produced || 0) / of.quantity * 100) : 0;
+          
+          let statusClass = of.status || 'planned';
+          if (interactive) {
+            const nowHours = getCurrentHoursInWeek();
+            if (nowHours !== null && of.status !== 'done' && of.startHours + of.duration + totalPause < nowHours && progress < 100) {
+              statusClass = 'late';
+            }
+          }
+          
+          for (const stop of sortedStops) {
+            const stopStart = stop.startHours;
+            const stopEnd = stopStart + stop.duration;
+            const ofNominalEnd = of.startHours + of.duration + totalPause;
+            
+            // Segment avant l'arrêt
+            if (currentStart < stopStart && currentStart < ofNominalEnd) {
+              const segmentEnd = Math.min(stopStart, ofNominalEnd);
+              const left = hoursToPixels(currentStart);
+              const width = Math.max(hoursToPixels(segmentEnd - currentStart), 20);
+              
+              html += `<div class="gantt-of-block segment ${statusClass}" 
+                style="left:${left}px;width:${width}px"
+                data-of-id="${of.id}"
+                data-draggable="${interactive}">
+                <div class="gantt-of-content">
+                  <div class="gantt-of-code">${of.articleCode}</div>
+                </div>
+              </div>`;
+            }
+            
+            // L'arrêt repousse la fin
+            if (stopStart < ofNominalEnd) {
+              totalPause += stop.duration;
+            }
+            currentStart = stopEnd;
+          }
+          
+          // Segment final après le dernier arrêt
+          const finalEnd = of.startHours + of.duration + totalPause;
+          if (currentStart < finalEnd) {
+            const left = hoursToPixels(currentStart);
+            const width = Math.max(hoursToPixels(finalEnd - currentStart), 20);
+            const endPos = positionToDayTime(finalEnd);
+            
+            html += `<div class="gantt-of-block segment-end ${statusClass}" 
+              style="left:${left}px;width:${width}px"
+              data-of-id="${of.id}"
+              data-draggable="${interactive}">
+              <div class="gantt-of-content">
+                <div class="gantt-of-qty">${of.quantity}</div>
+                <div class="gantt-of-time">→${endPos.time}</div>
+              </div>
+            </div>`;
           }
         }
-        
-        html += `<div class="gantt-of-block ${statusClass}" 
-          style="left:${left}px;width:${width}px"
-          data-of-id="${of.id}"
-          data-draggable="${interactive}">
-          ${progress > 0 ? `<div class="gantt-progress-bar" style="width:${progress}%"></div>` : ''}
-          <div class="gantt-of-content">
-            <div class="gantt-of-code">${of.articleCode}</div>
-            <div class="gantt-of-qty">${of.quantity} colis</div>
-            <div class="gantt-of-time">${of.startTime}→${endPos.time}</div>
-          </div>
-        </div>`;
       });
       
       html += '</div></div>';
