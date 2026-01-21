@@ -296,6 +296,7 @@ const PlanningModule = (function() {
           lines.forEach(line => {
             result.push({
               id: `${stop.id}_${dayIdx}_${line}`,
+              originalId: stop.id,
               type: 'stop',
               stopType: stop.type,
               line,
@@ -310,6 +311,181 @@ const PlanningModule = (function() {
     }
     
     return result;
+  }
+
+  // ==========================================
+  // CHANGEMENTS (CHANGEOVERS)
+  // ==========================================
+
+  function renderChangeoversList() {
+    const container = document.getElementById('changeoversList');
+    if (!container) return;
+
+    const changeovers = planningState.changeovers || [];
+    
+    if (changeovers.length === 0) {
+      container.innerHTML = '<p class="helper-text">Aucun changement planifié.</p>';
+      return;
+    }
+
+    container.innerHTML = changeovers.map(co => {
+      const typeInfo = CHANGEOVER_TYPES.find(t => t.id === co.type) || CHANGEOVER_TYPES[0];
+      return `
+        <div class="changeover-card" data-id="${co.id}" style="border-left: 4px solid ${typeInfo.color}">
+          <div class="changeover-card-info">
+            <div class="changeover-card-type">${typeInfo.label}</div>
+            <div class="changeover-card-details">
+              ${co.line} • ${DAYS[co.day]} ${co.startTime} • ${co.duration} min
+            </div>
+            ${co.comment ? `<div class="changeover-card-comment">${co.comment}</div>` : ''}
+          </div>
+          <button class="danger-btn btn-delete-changeover" data-id="${co.id}">🗑️</button>
+        </div>
+      `;
+    }).join('');
+
+    container.querySelectorAll('.btn-delete-changeover').forEach(btn => {
+      btn.addEventListener('click', () => deleteChangeover(btn.dataset.id));
+    });
+  }
+
+  function addChangeover() {
+    const type = document.getElementById('changeoverType')?.value || 'intermediate';
+    const line = document.getElementById('changeoverLine')?.value || '';
+    const day = parseInt(document.getElementById('changeoverDay')?.value) || 0;
+    const startTime = document.getElementById('changeoverStart')?.value || '06:00';
+    const duration = parseInt(document.getElementById('changeoverDuration')?.value) || 15;
+    const comment = document.getElementById('changeoverComment')?.value?.trim() || '';
+
+    if (!line) {
+      alert('Sélectionnez une ligne.');
+      return;
+    }
+
+    const [h, m] = startTime.split(':').map(Number);
+    const startHours = day * 24 + h + m / 60;
+    const durationHours = duration / 60;
+
+    const changeover = {
+      id: generateId(),
+      type,
+      line,
+      day,
+      startTime,
+      startHours,
+      duration,
+      durationHours,
+      comment
+    };
+
+    if (!planningState.changeovers) planningState.changeovers = [];
+    planningState.changeovers.push(changeover);
+    savePlanningState();
+    
+    renderChangeoversList();
+    renderPreviewGantt();
+    
+    // Reset form
+    document.getElementById('changeoverComment').value = '';
+  }
+
+  function deleteChangeover(id) {
+    planningState.changeovers = (planningState.changeovers || []).filter(c => c.id !== id);
+    savePlanningState();
+    renderChangeoversList();
+    renderPreviewGantt();
+  }
+
+  function getChangeoversForGantt() {
+    return (planningState.changeovers || []).map(co => {
+      const typeInfo = CHANGEOVER_TYPES.find(t => t.id === co.type) || CHANGEOVER_TYPES[0];
+      return {
+        id: co.id,
+        type: 'changeover',
+        changeoverType: co.type,
+        line: co.line,
+        startHours: co.startHours,
+        duration: co.durationHours,
+        label: typeInfo.label,
+        color: typeInfo.color,
+        comment: co.comment
+      };
+    });
+  }
+
+  // ==========================================
+  // CALCUL DES OFs AVEC ARRÊTS (SPLIT & EXTEND)
+  // ==========================================
+
+  // Calcule les segments d'un OF en tenant compte des arrêts qui le coupent
+  function calculateOFSegments(of, stops, changeovers) {
+    const segments = [];
+    let currentStart = of.startHours;
+    const ofEnd = of.startHours + of.duration;
+    let totalPause = 0;
+
+    // Trier tous les événements qui peuvent couper l'OF
+    const interruptions = [
+      ...stops.filter(s => s.line === of.line),
+      ...changeovers.filter(c => c.line === of.line)
+    ].sort((a, b) => a.startHours - b.startHours);
+
+    // Parcourir les interruptions
+    for (const interrupt of interruptions) {
+      const intStart = interrupt.startHours;
+      const intEnd = intStart + interrupt.duration;
+
+      // L'interruption commence après la fin de l'OF actuel (avec pauses accumulées)
+      if (intStart >= ofEnd + totalPause) continue;
+
+      // L'interruption finit avant le début de l'OF
+      if (intEnd <= currentStart) continue;
+
+      // L'interruption chevauche l'OF
+      if (intStart > currentStart && intStart < ofEnd + totalPause) {
+        // Ajouter un segment d'OF avant l'interruption
+        segments.push({
+          type: 'of',
+          startHours: currentStart,
+          endHours: intStart,
+          duration: intStart - currentStart
+        });
+      }
+
+      // Ajouter l'interruption comme segment
+      segments.push({
+        type: interrupt.type,
+        startHours: intStart,
+        endHours: intEnd,
+        duration: interrupt.duration,
+        label: interrupt.label,
+        color: interrupt.color || (interrupt.type === 'stop' ? '#e74c3c' : '#9b59b6')
+      });
+
+      // Mettre à jour le point de départ et la pause accumulée
+      if (intStart < ofEnd + totalPause) {
+        totalPause += interrupt.duration;
+        currentStart = intEnd;
+      }
+    }
+
+    // Ajouter le segment final de l'OF
+    const finalEnd = ofEnd + totalPause;
+    if (currentStart < finalEnd) {
+      segments.push({
+        type: 'of',
+        startHours: currentStart,
+        endHours: finalEnd,
+        duration: finalEnd - currentStart
+      });
+    }
+
+    return {
+      segments,
+      totalDuration: of.duration,
+      effectiveEnd: ofEnd + totalPause,
+      totalPause
+    };
   }
 
   // ==========================================
