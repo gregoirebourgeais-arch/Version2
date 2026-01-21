@@ -1023,82 +1023,214 @@ const PlanningModule = (function() {
   }
 
   // ==========================================
-  // DRAG AND DROP
+  // DRAG AND DROP - VERSION AMÉLIORÉE
   // ==========================================
 
   function initDragDrop(container, isActive) {
+    // Drag pour les blocs OF
     container.querySelectorAll('.gantt-of-block[data-draggable="true"]').forEach(block => {
       block.addEventListener('mousedown', (e) => {
-        if (e.button !== 0) return; // Left click only
-        
-        const ofId = block.dataset.ofId;
-        const rect = block.getBoundingClientRect();
-        const containerRect = block.closest('.gantt-line-track').getBoundingClientRect();
-        
-        planningState.dragData = {
-          ofId,
-          startX: e.clientX,
-          originalLeft: block.offsetLeft,
-          block,
-          isActive,
-          containerWidth: containerRect.width
-        };
-        
-        block.classList.add('dragging');
-        document.addEventListener('mousemove', handleDragMove);
-        document.addEventListener('mouseup', handleDragEnd);
-        e.preventDefault();
+        if (e.button !== 0) return;
+        startDrag(e, block, 'of', isActive);
       });
     });
+
+    // Drag pour les blocs arrêt
+    container.querySelectorAll('.gantt-stop-block[data-draggable="true"]').forEach(block => {
+      block.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        startDrag(e, block, 'stop', isActive);
+      });
+    });
+
+    // Drag pour les blocs changeover
+    container.querySelectorAll('.gantt-changeover-block[data-draggable="true"]').forEach(block => {
+      block.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        startDrag(e, block, 'changeover', isActive);
+      });
+    });
+  }
+
+  function startDrag(e, block, blockType, isActive) {
+    const track = block.closest('.gantt-line-track');
+    const containerRect = track.getBoundingClientRect();
+    const line = track.dataset.line;
+    
+    planningState.dragData = {
+      blockId: block.dataset.ofId || block.dataset.stopId || block.dataset.changeoverId,
+      blockType,
+      startX: e.clientX,
+      startY: e.clientY,
+      originalLeft: block.offsetLeft,
+      originalLine: line,
+      block,
+      isActive,
+      containerWidth: containerRect.width,
+      containerTop: containerRect.top
+    };
+    
+    block.classList.add('dragging');
+    document.addEventListener('mousemove', handleDragMove);
+    document.addEventListener('mouseup', handleDragEnd);
+    e.preventDefault();
   }
 
   function handleDragMove(e) {
     if (!planningState.dragData) return;
     
-    const { block, startX, originalLeft, containerWidth } = planningState.dragData;
+    const { block, startX, originalLeft, containerWidth, blockType } = planningState.dragData;
     const deltaX = e.clientX - startX;
     let newLeft = originalLeft + deltaX;
     
-    // Limiter au conteneur
+    // Limiter au conteneur horizontalement
     newLeft = Math.max(0, Math.min(newLeft, containerWidth - block.offsetWidth));
-    
     block.style.left = newLeft + 'px';
+
+    // Pour les arrêts, permettre le changement de ligne (feedback visuel)
+    if (blockType === 'stop') {
+      // Trouver la ligne survolée
+      const ganttContainer = block.closest('.gantt-wrapper-v4');
+      if (ganttContainer) {
+        const rows = ganttContainer.querySelectorAll('.gantt-row-v4');
+        rows.forEach(row => {
+          const rect = row.getBoundingClientRect();
+          if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+            row.classList.add('drag-over');
+          } else {
+            row.classList.remove('drag-over');
+          }
+        });
+      }
+    }
   }
 
   function handleDragEnd(e) {
     if (!planningState.dragData) return;
     
-    const { ofId, block, isActive, containerWidth } = planningState.dragData;
+    const { blockId, blockType, block, isActive, originalLine } = planningState.dragData;
     
     document.removeEventListener('mousemove', handleDragMove);
     document.removeEventListener('mouseup', handleDragEnd);
     
     block.classList.remove('dragging');
     
+    // Nettoyer les indicateurs de survol
+    document.querySelectorAll('.gantt-row-v4.drag-over').forEach(row => {
+      row.classList.remove('drag-over');
+    });
+    
     // Calculer la nouvelle position en heures
     const newLeft = parseInt(block.style.left) || 0;
     const newStartHours = pixelsToHours(newLeft);
-    
-    // Arrondir à 15 minutes (0.25h)
-    const roundedHours = Math.round(newStartHours * 4) / 4;
-    
-    // Trouver et mettre à jour l'OF
-    let of = isActive 
-      ? planningState.activePlanning?.ofs.find(o => o.id === ofId)
-      : planningState.currentOFs.find(o => o.id === ofId);
-    
-    if (of && roundedHours >= 0 && roundedHours + of.duration <= TOTAL_HOURS) {
-      of.startHours = roundedHours;
-      const dayTime = positionToDayTime(roundedHours);
-      of.day = dayTime.day;
-      of.startTime = dayTime.time;
-      
-      savePlanningState();
+    const roundedHours = Math.round(newStartHours * 4) / 4; // Arrondir à 15 min
+
+    // Trouver la ligne cible (pour les arrêts qui peuvent changer de ligne)
+    let targetLine = originalLine;
+    if (blockType === 'stop') {
+      const ganttContainer = block.closest('.gantt-wrapper-v4');
+      if (ganttContainer) {
+        const rows = ganttContainer.querySelectorAll('.gantt-row-v4');
+        rows.forEach(row => {
+          const rect = row.getBoundingClientRect();
+          if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+            const track = row.querySelector('.gantt-line-track');
+            if (track) targetLine = track.dataset.line;
+          }
+        });
+      }
+    }
+
+    // Appliquer les règles selon le type de bloc
+    if (blockType === 'of') {
+      handleOFDrop(blockId, roundedHours, isActive);
+    } else if (blockType === 'stop') {
+      handleStopDrop(blockId, roundedHours, targetLine, isActive);
+    } else if (blockType === 'changeover') {
+      handleChangeoverDrop(blockId, roundedHours, isActive);
     }
     
     planningState.dragData = null;
+  }
+
+  // Gestion du drop d'un OF : reste sur sa ligne, décale les autres OFs
+  function handleOFDrop(ofId, newStartHours, isActive) {
+    const ofs = isActive ? planningState.activePlanning?.ofs : planningState.currentOFs;
+    if (!ofs) return;
+
+    const of = ofs.find(o => o.id === ofId);
+    if (!of) return;
+
+    // Vérifier les limites
+    if (newStartHours < 0 || newStartHours + of.duration > TOTAL_HOURS) {
+      refreshGantt(isActive);
+      return;
+    }
+
+    const oldStart = of.startHours;
+    of.startHours = newStartHours;
     
-    // Rafraîchir
+    const dayTime = positionToDayTime(newStartHours);
+    of.day = dayTime.day;
+    of.startTime = dayTime.time;
+
+    // Vérifier les collisions avec d'autres OFs sur la même ligne et les décaler
+    const lineOFs = ofs.filter(o => o.line === of.line && o.id !== ofId)
+                       .sort((a, b) => a.startHours - b.startHours);
+
+    const ofEnd = newStartHours + of.duration;
+    
+    for (const otherOF of lineOFs) {
+      const otherEnd = otherOF.startHours + otherOF.duration;
+      
+      // Si collision
+      if (newStartHours < otherEnd && ofEnd > otherOF.startHours) {
+        // Décaler l'autre OF à la fin de celui-ci
+        otherOF.startHours = ofEnd;
+        const newDayTime = positionToDayTime(otherOF.startHours);
+        otherOF.day = newDayTime.day;
+        otherOF.startTime = newDayTime.time;
+      }
+    }
+
+    savePlanningState();
+    refreshGantt(isActive);
+  }
+
+  // Gestion du drop d'un arrêt : peut aller partout, coupe les OFs
+  function handleStopDrop(stopId, newStartHours, targetLine, isActive) {
+    // Pour les arrêts planifiés, on ne modifie pas directement
+    // On crée une copie locale ou on notifie l'utilisateur
+    // Pour l'instant, on recharge juste le Gantt
+    
+    // TODO: Implémenter le déplacement des arrêts si nécessaire
+    refreshGantt(isActive);
+  }
+
+  // Gestion du drop d'un changeover
+  function handleChangeoverDrop(changeoverId, newStartHours, isActive) {
+    const changeover = (planningState.changeovers || []).find(c => c.id === changeoverId);
+    if (!changeover) {
+      refreshGantt(isActive);
+      return;
+    }
+
+    // Vérifier les limites
+    if (newStartHours < 0 || newStartHours + changeover.durationHours > TOTAL_HOURS) {
+      refreshGantt(isActive);
+      return;
+    }
+
+    changeover.startHours = newStartHours;
+    const dayTime = positionToDayTime(newStartHours);
+    changeover.day = dayTime.day;
+    changeover.startTime = dayTime.time;
+
+    savePlanningState();
+    refreshGantt(isActive);
+  }
+
+  function refreshGantt(isActive) {
     if (isActive) {
       renderActiveGantt();
       renderActiveOFList();
