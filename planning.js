@@ -1375,7 +1375,10 @@ const PlanningModule = (function() {
     document.getElementById('planningArticleAddBtn')?.addEventListener('click', addOrUpdateArticle);
     document.getElementById('planningArticleClearBtn')?.addEventListener('click', clearArticleForm);
 
-    // Semaine
+    // Semaine - mise à jour automatique du lundi quand le numéro de semaine change
+    document.getElementById('planningWeekNumber')?.addEventListener('change', onWeekNumberChange);
+    document.getElementById('planningWeekNumber')?.addEventListener('input', onWeekNumberChange);
+    
     document.getElementById('planningAutoWeekBtn')?.addEventListener('click', () => {
       setCurrentWeek();
       initWeekInputs();
