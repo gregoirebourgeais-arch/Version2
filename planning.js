@@ -1806,6 +1806,9 @@ const PlanningModule = (function() {
     // Arrêts planifiés
     document.getElementById('plannedStopAddBtn')?.addEventListener('click', addPlannedStop);
 
+    // Changements (changeovers)
+    document.getElementById('changeoverAddBtn')?.addEventListener('click', addChangeover);
+
     // Validation
     document.getElementById('planningValidateBtn')?.addEventListener('click', validatePlanning);
 
