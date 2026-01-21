@@ -1,4 +1,4 @@
-const CACHE_NAME = "atelier-ppnc-v1";
+const CACHE_NAME = "atelier-ppnc-v2";
 
 const ASSETS = [
   "./",
