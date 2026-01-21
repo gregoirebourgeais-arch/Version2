@@ -75,10 +75,55 @@ const PlanningModule = (function() {
     return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
   }
 
+  // Calcule le lundi d'une semaine donnée (ISO 8601)
+  function getMondayOfWeek(weekNumber, year = new Date().getFullYear()) {
+    // Le 4 janvier est toujours dans la semaine 1 (ISO 8601)
+    const jan4 = new Date(year, 0, 4);
+    const jan4Day = jan4.getDay() || 7; // 1=Lundi, 7=Dimanche
+    
+    // Trouver le lundi de la semaine 1
+    const mondayWeek1 = new Date(jan4);
+    mondayWeek1.setDate(jan4.getDate() - jan4Day + 1);
+    
+    // Ajouter (weekNumber - 1) semaines
+    const targetMonday = new Date(mondayWeek1);
+    targetMonday.setDate(mondayWeek1.getDate() + (weekNumber - 1) * 7);
+    
+    return targetMonday;
+  }
+
   function setCurrentWeek() {
     const monday = getMonday(new Date());
     planningState.weekStart = formatDateISO(monday);
     planningState.weekNumber = getWeekNumber(monday);
+    savePlanningState();
+  }
+
+  // Met à jour la date du lundi quand le numéro de semaine change
+  function onWeekNumberChange() {
+    console.log('onWeekNumberChange appelé');
+    const weekNumInput = document.getElementById('planningWeekNumber');
+    const weekStartInput = document.getElementById('planningWeekStart');
+    
+    if (!weekNumInput || !weekStartInput) {
+      console.log('Inputs non trouvés');
+      return;
+    }
+    
+    const weekNum = parseInt(weekNumInput.value);
+    console.log('Numéro de semaine:', weekNum);
+    if (isNaN(weekNum) || weekNum < 1 || weekNum > 53) {
+      console.log('Numéro de semaine invalide');
+      return;
+    }
+    
+    const monday = getMondayOfWeek(weekNum);
+    const isoDate = formatDateISO(monday);
+    console.log('Nouveau lundi calculé:', isoDate);
+    
+    weekStartInput.value = isoDate;
+    planningState.weekNumber = weekNum;
+    planningState.weekStart = isoDate;
     savePlanningState();
   }
 
@@ -1316,6 +1361,7 @@ const PlanningModule = (function() {
   }
 
   function bindEvents() {
+    console.log('bindEvents() called');
     // Navigation onglets
     document.querySelectorAll('#section-planning .planning-tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1339,7 +1385,14 @@ const PlanningModule = (function() {
     document.getElementById('planningArticleAddBtn')?.addEventListener('click', addOrUpdateArticle);
     document.getElementById('planningArticleClearBtn')?.addEventListener('click', clearArticleForm);
 
-    // Semaine
+    // Semaine - mise à jour automatique du lundi quand le numéro de semaine change
+    const weekNumEl = document.getElementById('planningWeekNumber');
+    console.log('Binding planningWeekNumber:', weekNumEl ? 'FOUND' : 'NOT FOUND');
+    if (weekNumEl) {
+      weekNumEl.addEventListener('change', onWeekNumberChange);
+      weekNumEl.addEventListener('input', onWeekNumberChange);
+    }
+    
     document.getElementById('planningAutoWeekBtn')?.addEventListener('click', () => {
       setCurrentWeek();
       initWeekInputs();
@@ -1370,16 +1423,6 @@ const PlanningModule = (function() {
     document.getElementById('planningOFEditClose')?.addEventListener('click', closeOFEditor);
     document.getElementById('planningEditOFSave')?.addEventListener('click', saveOFEdit);
     document.getElementById('planningEditOFDelete')?.addEventListener('click', deleteOFFromEditor);
-
-    // Semaine
-    document.getElementById('planningWeekNumber')?.addEventListener('change', (e) => {
-      planningState.weekNumber = parseInt(e.target.value);
-      savePlanningState();
-    });
-    document.getElementById('planningWeekStart')?.addEventListener('change', (e) => {
-      planningState.weekStart = e.target.value;
-      savePlanningState();
-    });
 
     // Rafraîchir
     document.getElementById('planningRefreshBtn')?.addEventListener('click', () => {

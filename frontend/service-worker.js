@@ -1,10 +1,11 @@
-const CACHE_NAME = "atelier-ppnc-v1";
+const CACHE_NAME = "atelier-ppnc-v2";
 
 const ASSETS = [
   "./",
   "./index.html",
   "./style.css",
   "./app.js",
+  "./planning.js",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png",
