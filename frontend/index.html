@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Atelier PPNC - Production lignes</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#005bff" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- IndexedDB helper (Dexie) pour la base locale du manager -->
+  <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+
+  <!-- SheetJS -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker
+          .register("service-worker.js")
+          .catch((err) => console.error("SW registration failed", err));
+      });
+    }
+  </script>
+</head>
+
+<body>
+  <header class="app-header">
+    <div class="app-title">
+      <span class="app-main-title">Atelier PPNC</span>
+      <span class="app-sub-title">Suivi Production & Arrêts</span>
+    </div>
+    <div class="header-info" id="header-datetime">
+      <!-- injecté JS -->
+    </div>
+    <div class="header-actions">
+      <button id="settingsToggle" class="icon-btn" title="Paramètres et sécurité">⚙️</button>
+      <select id="equipeSelector" class="equipe-selector">
+        <option value="M">Équipe M</option>
+        <option value="AM">Équipe AM</option>
+        <option value="N">Équipe N</option>
+      </select>
+      <button id="themeToggleBtn" class="theme-toggle">🌗 Thème</button>
+    </div>
+  </header>
+
+  <!-- Barre de navigation -->
+  <nav class="top-nav">
+    <button class="nav-btn active" data-section="atelier">Atelier</button>
+    <button class="nav-btn" data-section="production">Production</button>
+    <button class="nav-btn" data-section="arrets">Arrêts</button>
+    <button class="nav-btn" data-section="organisation">Organisation</button>
+    <button class="nav-btn" data-section="personnel">Personnel</button>
+    <button class="nav-btn" data-section="validation">Validation DDM</button>
+    <button class="nav-btn" data-section="historique">Historique équipes</button>
+    <button class="nav-btn" data-section="manager">Manager (base dédiée)</button>
+    <button class="nav-btn" data-section="planning">Planning</button>
+  </nav>
+
+  <main>
+    <!-- PAGE ATELIER -->
+    <section id="section-atelier" class="section visible">
+      <h2>Vue d'ensemble Atelier</h2>
+
+      <div class="atelier-grid">
+        <div class="card">
+          <h3>Production par ligne (aujourd'hui)</h3>
+          <div id="atelier-lines-summary"></div>
+        </div>
+
+        <div class="card">
+          <h3>Mise à jour Excel</h3>
+          <p class="helper-text">
+            Charge un ou plusieurs fichiers du type <strong>Atelier_DATA_EQN_Qxxx_Sxx_hhmm.xlsx</strong>. Pas de limite à 3 fichiers ni à un seul import par jour.
+          </p>
+
+          <div class="import-actions">
+            <input type="file" id="excelInput" accept=".xlsx,.xls" multiple />
+            <button id="importExcelBtn" class="primary-btn">📥 Mise à jour</button>
+          </div>
+
+          <div id="importStatus" class="import-status helper-text"></div>
+
+          <div class="table-wrapper-horizontal">
+            <table class="table" id="importsTable">
+              <thead>
+                <tr>
+                  <th>Fichier</th>
+                  <th>Q / S / Heure</th>
+                  <th>Enregistrements</th>
+                  <th>Importé le</th>
+                </tr>
+              </thead>
+              <tbody id="importsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Évolution des cadences</h3>
+          <canvas id="atelierChart"></canvas>
+          <p class="helper-text">
+            Une courbe par ligne, basée sur les enregistrements de production.
+          </p>
+        </div>
+
+        <div class="card">
+          <h3>Arrêts principaux</h3>
+          <div class="table-wrapper-horizontal">
+            <table class="table" id="atelier-arrets-table">
+              <thead>
+                <tr>
+                  <th>Ligne</th>
+                  <th>Sous-ligne</th>
+                  <th>Machine</th>
+                  <th>Durée (min)</th>
+                  <th>Commentaire</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Export Excel</h3>
+          <p class="helper-text">
+            Export pour présentation en réunion (5 onglets : Synthèse, Production, Arrêts, Organisation, Personnel).
+          </p>
+
+          <button id="exportPresentationBtn" class="primary-btn" style="margin-bottom: 15px;">
+            📈 Export PRÉSENTATION
+          </button>
+
+          <p class="helper-text" style="margin-top: 20px;">
+            RAZ d'équipe : exporte DATA + PRÉSENTATION de l'équipe finissante, puis reset complet.
+          </p>
+
+          <button id="razBtn" class="danger-btn">
+            🔄 RAZ équipe (double export + reset)
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Recherche dans les imports Excel</h3>
+        <div class="form-grid import-filters">
+          <div class="form-group">
+            <label for="importSearchInput">Recherche texte</label>
+            <input type="text" id="importSearchInput" placeholder="Article, machine, commentaire..." />
+          </div>
+          <div class="form-group">
+            <label for="importEquipeFilter">Équipe</label>
+            <select id="importEquipeFilter">
+              <option value="">Toutes</option>
+              <option value="M">M</option>
+              <option value="AM">AM</option>
+              <option value="N">N</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="importLineFilter">Ligne</label>
+            <select id="importLineFilter">
+              <option value="">Toutes les lignes</option>
+            </select>
+          </div>
+        </div>
+
+        <p class="helper-text" id="importResultsCount"></p>
+
+        <div class="table-wrapper-horizontal">
+          <table class="table" id="importResultsTable">
+            <thead>
+              <tr>
+                <th>Date/Heure</th>
+                <th>Équipe</th>
+                <th>Ligne</th>
+                <th>Machine</th>
+                <th>Quantité</th>
+                <th>Arrêt (min)</th>
+                <th>Cadence</th>
+                <th>Commentaire</th>
+                <th>Fichier</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE PRODUCTION -->
+    <section id="section-production" class="section">
+      <div class="production-layout">
+        <aside class="lines-sidebar">
+          <h3>Lignes</h3>
+          <div class="lines-list" id="linesList"></div>
+        </aside>
+
+        <div class="line-content">
+          <h2 id="currentLineTitle">Ligne</h2>
+
+          <div class="card">
+            <h3>Saisie production</h3>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="prodStartTime">Heure début</label>
+                <input type="time" id="prodStartTime" />
+              </div>
+
+              <div class="form-group">
+                <label for="prodEndTime">Heure fin</label>
+                <input type="time" id="prodEndTime" />
+              </div>
+
+              <div class="form-group">
+                <label for="prodQuantity">Quantité produite (colis)</label>
+                <input type="number" id="prodQuantity" min="0" />
+              </div>
+
+              <div class="form-group">
+                <label for="prodCodeArticle">Code article (optionnel)</label>
+                <input type="text" id="prodCodeArticle" />
+              </div>
+
+              <div class="form-group">
+                <label for="prodRemaining">Quantité restante (colis)</label>
+                <input type="number" id="prodRemaining" min="0" />
+              </div>
+
+              <div class="form-group">
+                <label for="prodCadenceManual">Cadence manuelle (colis/h)</label>
+                <input type="number" id="prodCadenceManual" min="0" step="0.01" />
+              </div>
+
+              <div class="form-group">
+                <label for="prodArretMinutes">Arrêts (min)</label>
+                <input type="number" id="prodArretMinutes" min="0" />
+              </div>
+
+              <div class="form-group form-group-wide">
+                <label for="prodComment">Commentaire</label>
+                <textarea id="prodComment" rows="2"></textarea>
+              </div>
+            </div>
+
+            <div class="info-row">
+              <div>
+                <strong>Cadence :</strong>
+                <span id="prodCadenceDisplay">-</span> colis/heure
+              </div>
+              <div>
+                <strong>Temps restant :</strong>
+                <span id="prodRemainingTimeDisplay">-</span>
+              </div>
+            </div>
+
+            <div class="buttons-row">
+              <button id="prodSaveBtn" class="primary-btn">💾 Enregistrer</button>
+              <button id="prodUndoBtn" class="secondary-btn">↩️ Annuler dernier</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Historique de la ligne</h3>
+            <div class="table-wrapper-horizontal">
+              <table class="table" id="prodHistoryTable">
+                <thead>
+                  <tr>
+                    <th>Date/Heure</th>
+                    <th>Équipe</th>
+                    <th>Début</th>
+                    <th>Fin</th>
+                    <th>Qté</th>
+                    <th>Arrêt</th>
+                    <th>Cadence</th>
+                    <th>Temps restant</th>
+                    <th>Commentaire</th>
+                    <th>Article</th>
+                    <th>Suppr.</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE ARRETS -->
+    <section id="section-arrets" class="section">
+      <div class="card">
+        <h2>Nouvel arrêt</h2>
+
+        <div class="form-row">
+          <label for="arretLine">Ligne impactée :</label>
+          <select id="arretLine"></select>
+        </div>
+
+        <div class="form-row">
+          <label for="arretSousZone">Sous-zone :</label>
+          <select id="arretSousZone"></select>
+        </div>
+
+        <div class="form-row">
+          <label for="arretMachine">Machine :</label>
+          <select id="arretMachine"></select>
+        </div>
+
+        <div class="form-row">
+          <label for="arretArticle">Code article (optionnel)</label>
+          <input type="text" id="arretArticle" />
+        </div>
+
+        <div class="form-row">
+          <label for="arretDuration">Durée (min) :</label>
+          <input type="number" id="arretDuration" min="0" />
+        </div>
+
+        <div class="form-row">
+          <label for="arretComment">Commentaire :</label>
+          <textarea id="arretComment" rows="3"></textarea>
+        </div>
+
+        <button id="arretSaveBtn" class="primary-btn">💾 Enregistrer l'arrêt</button>
+      </div>
+
+      <div class="card">
+        <h2>Historique des arrêts</h2>
+        <div class="table-wrapper">
+          <table id="arretsHistoryTable" class="data-table">
+            <thead>
+              <tr>
+                <th>Date/Heure</th>
+                <th>Ligne</th>
+                <th>Sous-zone</th>
+                <th>Machine</th>
+                <th>Article</th>
+                <th>Durée (min)</th>
+                <th>Commentaire</th>
+                <th>Suppr.</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE ORGANISATION -->
+    <section id="section-organisation" class="section">
+      <h2>Organisation / Consignes</h2>
+
+      <div class="card">
+        <h3>Nouvelle consigne</h3>
+        <div class="form-grid">
+          <div class="form-group form-group-wide">
+            <label for="orgConsigne">Consigne</label>
+            <textarea id="orgConsigne" rows="3"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="orgVisa">Visa</label>
+            <input type="text" id="orgVisa" />
+          </div>
+        </div>
+
+        <div class="buttons-row">
+          <button id="orgSaveBtn" class="primary-btn">💾 Enregistrer consigne</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Historique des consignes</h3>
+        <table class="table" id="orgHistoryTable">
+          <thead>
+            <tr>
+              <th>Date/Heure</th>
+              <th>Équipe</th>
+              <th>Consigne</th>
+              <th>Visa</th>
+              <th>Validée ?</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- PAGE PERSONNEL -->
+    <section id="section-personnel" class="section">
+      <h2>Personnel</h2>
+
+      <div class="card">
+        <h3>Événement personnel</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="persNom">Nom</label>
+            <input type="text" id="persNom" />
+          </div>
+
+          <div class="form-group">
+            <label for="persMotif">Motif</label>
+            <select id="persMotif">
+              <option value="Absence">Absence</option>
+              <option value="Retard">Retard</option>
+              <option value="Départ">Départ</option>
+              <option value="Autre">Autre</option>
+            </select>
+          </div>
+
+          <div class="form-group form-group-wide">
+            <label for="persComment">Commentaire</label>
+            <textarea id="persComment" rows="2"></textarea>
+          </div>
+        </div>
+
+        <div class="buttons-row">
+          <button id="persSaveBtn" class="primary-btn">💾 Enregistrer</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Historique personnel</h3>
+        <table class="table" id="persHistoryTable">
+          <thead>
+            <tr>
+              <th>Date/Heure</th>
+              <th>Équipe</th>
+              <th>Nom</th>
+              <th>Motif</th>
+              <th>Commentaire</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- PAGE VALIDATION DDM -->
+    <section id="section-validation" class="section">
+      <h2>Validation DDM</h2>
+
+      <div class="card">
+        <h3>Calcul de la DDM</h3>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="ddmQuantieme">Quantième fabrication</label>
+            <input type="number" id="ddmQuantieme" min="1" max="366" placeholder="Ex: 100" />
+          </div>
+
+          <div class="form-group">
+            <label for="ddmAnnee">Année fabrication</label>
+            <input type="number" id="ddmAnnee" placeholder="Ex: 2024" />
+          </div>
+
+          <div class="form-group">
+            <label for="ddmDuree">Durée de vie (jours)</label>
+            <input type="number" id="ddmDuree" min="0" placeholder="Ex: 90" />
+          </div>
+        </div>
+
+        <div class="buttons-row">
+          <button id="ddmCalcBtn" class="primary-btn">🧮 Calculer DDM</button>
+        </div>
+
+        <p class="ddm-result">
+          DDM calculée : <strong id="ddmResult">-</strong>
+        </p>
+      </div>
+    </section>
+
+    <!-- PAGE HISTORIQUE EQUIPES -->
+    <section id="section-historique" class="section">
+      <div class="card">
+        <h2>Historique des équipes</h2>
+
+        <label for="historySelect">Équipe / période enregistrée :</label>
+        <select id="historySelect">
+          <option value="">-- Sélectionner --</option>
+        </select>
+        <div id="historyFolderStatus" class="import-status helper-text"></div>
+      </div>
+
+      <div class="card">
+        <h3>Vue d'ensemble</h3>
+        <div id="history-lines-summary" class="summary-grid"></div>
+      </div>
+
+      <div class="card">
+        <h3>Évolution des cadences</h3>
+        <canvas id="historyChart"></canvas>
+      </div>
+
+      <div class="card">
+        <h3>Arrêts (classement par durée)</h3>
+        <table id="history-arrets-table" class="data-table">
+          <thead>
+            <tr>
+              <th>Ligne</th>
+              <th>Sous-ligne</th>
+              <th>Machine</th>
+              <th>Durée (min)</th>
+              <th>Commentaire</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="card" id="history-organisation" style="display: none;">
+        <h3>Organisation / Consignes</h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date/Heure</th>
+              <th>Équipe</th>
+              <th>Consigne</th>
+              <th>Visa</th>
+              <th>Validée</th>
+              <th>Supprimer</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="card" id="history-personnel" style="display: none;">
+        <h3>Personnel</h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date/Heure</th>
+              <th>Équipe</th>
+              <th>Nom</th>
+              <th>Motif</th>
+              <th>Commentaire</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- PAGE MANAGER (base dédiée) -->
+    <section id="section-manager" class="section">
+      <h2>Base manager (indépendante & locale)</h2>
+      <p class="helper-text">
+        Importe les fichiers Excel et recopie toutes les lignes dans un classeur unique généré par l'application. La
+        recherche parcourt l'intégralité de l'historique stocké dans ce classeur, sans dépendance réseau.
+      </p>
+
+      <div class="manager-grid" id="managerContent">
+        <div class="card">
+          <h3>Import vers la base manager</h3>
+          <div class="info-bubble">
+            <button type="button" class="icon-btn info-toggle" id="managerInfoToggle" title="Détails de la mise à jour">ℹ️ Détails</button>
+            <div class="info-bubble__content hidden" id="managerInfoContent">
+              Les fichiers peuvent arriver à tout moment (jusqu'à plusieurs par équipe). Clique sur « Mise à jour » pour
+              scanner un dossier (ex : honor200 ➜ Documents) et ne récupérer que les fichiers Excel non encore importés.
+              Une vérification automatique relance ce scan toutes les 30 minutes si le dossier est autorisé.
+            </div>
+          </div>
+          <div class="import-actions">
+            <input type="file" id="managerExcelInput" accept=".xlsx,.xls" multiple />
+            <button id="managerScanBtn" class="primary-btn">📂 Mise à jour (scanne un dossier)</button>
+            <button id="managerImportBtn" class="secondary-btn" title="Importer manuellement plusieurs fichiers">
+              📥 Importer une sélection
+            </button>
+            <button id="managerExportBtn" class="secondary-btn" title="Télécharger le classeur historisé">📑 Export Excel</button>
+            <button id="managerResetBtn" class="danger-btn" title="Effacer la base manager (pas les autres formulaires)">🗑️ Vider la base</button>
+          </div>
+          <div id="managerImportStatus" class="import-status helper-text"></div>
+          <div id="managerFolderStatus" class="import-status helper-text"></div>
+
+        </div>
+
+        <div class="card" id="managerSearchCard">
+          <h3>Recherche et tri</h3>
+          <p class="helper-text">Tape un mot-clé ou combine plusieurs filtres. La recherche couvre tous les champs de l'historique.</p>
+          <div class="form-grid import-filters">
+            <div class="form-group">
+              <label for="managerSearchInput">Recherche texte</label>
+              <input type="text" id="managerSearchInput" placeholder="Tape ici pour chercher dans la base" />
+            </div>
+            <div class="form-group">
+              <label for="managerEquipeFilter">Équipe</label>
+              <select id="managerEquipeFilter">
+                <option value="">Toutes</option>
+                <option value="M">M</option>
+                <option value="AM">AM</option>
+                <option value="N">N</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="managerLineFilter">Ligne</label>
+              <select id="managerLineFilter">
+                <option value="">Toutes</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="managerSortField">Tri</label>
+              <select id="managerSortField"></select>
+            </div>
+            <div class="form-group">
+              <label for="managerSortDir">Ordre</label>
+              <select id="managerSortDir">
+                <option value="desc">Décroissant</option>
+                <option value="asc">Croissant</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="managerDateStart">Début période (Pareto)</label>
+              <input type="date" id="managerDateStart" />
+            </div>
+            <div class="form-group">
+              <label for="managerDateEnd">Fin période (Pareto)</label>
+              <input type="date" id="managerDateEnd" />
+            </div>
+            <div class="form-group">
+              <label for="managerParetoLine">Ligne (Pareto)</label>
+              <select id="managerParetoLine">
+                <option value="">Toutes</option>
+              </select>
+            </div>
+            <div class="form-group pareto-action">
+              <label>&nbsp;</label>
+              <button id="managerParetoBtn" class="secondary-btn" type="button">📊 Afficher le Pareto des arrêts</button>
+            </div>
+          </div>
+
+          <div class="manager-active-filters" id="managerActiveFilters"></div>
+          <div class="field-selector" id="managerFieldSelector"></div>
+          <p class="helper-text" id="managerResultsCount"></p>
+        </div>
+      </div>
+
+      <div class="card" id="managerResultsCard">
+        <div class="manager-results-header">
+          <div>
+            <h3>Résultats (base manager)</h3>
+            <p class="helper-text">Affichage enrichi avec rappel des métadonnées fichier (quantième, semaine, heure).</p>
+          </div>
+          <div class="manager-result-badges" id="managerResultBadges"></div>
+        </div>
+
+        <div class="manager-results-grid">
+          <div class="manager-stats" id="managerStats"></div>
+
+          <div class="table-wrapper-horizontal">
+            <table class="table manager-table" id="managerResultsTable">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Date/Heure</th>
+                  <th>Équipe</th>
+                  <th>Ligne</th>
+                  <th>Sous-ligne</th>
+                  <th>Machine</th>
+                  <th>Quantité</th>
+                  <th>Arrêt (min)</th>
+                  <th>Cadence</th>
+                  <th>Commentaire</th>
+                  <th>Article</th>
+                  <th>Personnel</th>
+                  <th>Motif</th>
+                  <th>Fichier (Q/S/H)</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="managerParetoCard" style="display: none;">
+        <div class="manager-results-header">
+          <div>
+            <h3 id="managerParetoTitle">Pareto des arrêts</h3>
+            <p class="helper-text" id="managerParetoSubtitle">Camembert basé sur les arrêts (minutes) filtrés par période ou ligne.</p>
+          </div>
+          <div class="manager-result-badges" id="managerParetoBadges"></div>
+        </div>
+        <div class="pareto-chart-wrapper">
+          <canvas id="managerPareto"></canvas>
+        </div>
+        <p class="helper-text pareto-click-info" id="managerParetoClickInfo"></p>
+        <div class="pareto-actions">
+          <button id="managerParetoBackToTop" class="secondary-btn" type="button">⬆️ Haut de page</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE PLANNING -->
+    <section id="section-planning" class="section">
+      <div class="planning-tabs">
+        <button class="planning-tab-btn active" data-tab="articles">📦 Articles</button>
+        <button class="planning-tab-btn" data-tab="build">🔧 Créer Planning</button>
+        <button class="planning-tab-btn" data-tab="run">📊 Planning Actif</button>
+      </div>
+
+      <!-- TAB 1: GESTION DES ARTICLES -->
+      <div id="planning-tab-articles" class="planning-pane">
+        <div class="card">
+          <h3>📦 Base Articles</h3>
+          <p class="helper-text">Les articles sont permanents et utilisables pour tous vos plannings. Chaque article est lié à une ligne et une cadence.</p>
+          
+          <div class="planning-article-form">
+            <div class="form-grid">
+              <label>Code article *
+                <input type="text" id="planningArticleCode" placeholder="Ex: ART001" />
+              </label>
+              <label>Libellé *
+                <input type="text" id="planningArticleLabel" placeholder="Ex: Emmental râpé 200g" />
+              </label>
+              <label>Ligne de production *
+                <select id="planningArticleLine"></select>
+              </label>
+              <label>Cadence (colis/h) *
+                <input type="number" id="planningArticleCadence" step="1" min="1" placeholder="Ex: 150" />
+              </label>
+              <label>Poids colis (kg)
+                <input type="number" id="planningArticlePoids" step="0.01" min="0" placeholder="Ex: 2.5" />
+              </label>
+            </div>
+            <div class="buttons-row">
+              <button class="primary-btn" id="planningArticleAddBtn">➕ Ajouter / Modifier</button>
+              <button class="secondary-btn" id="planningArticleClearBtn">🗑️ Effacer</button>
+            </div>
+          </div>
+
+          <h4>Liste des articles enregistrés</h4>
+          <div class="planning-articles-list" id="planningArticlesList">
+            <p class="helper-text">Aucun article enregistré.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: CRÉATION DU PLANNING -->
+      <div id="planning-tab-build" class="planning-pane hidden">
+        <div class="card">
+          <h3>📅 Paramètres du Planning</h3>
+          <div class="planning-week-config">
+            <label>Semaine n°
+              <input type="number" id="planningWeekNumber" min="1" max="53" />
+            </label>
+            <label>Lundi de référence
+              <input type="date" id="planningWeekStart" />
+            </label>
+            <button class="secondary-btn" id="planningAutoWeekBtn">📆 Semaine actuelle</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>⏸️ Arrêts Planifiés</h3>
+          <p class="helper-text">Définissez les pauses, maintenances et autres arrêts récurrents.</p>
+          <div class="form-grid">
+            <label>Type d'arrêt
+              <select id="plannedStopType">
+                <option value="Pause">Pause</option>
+                <option value="Maintenance">Maintenance</option>
+                <option value="Nettoyage">Nettoyage</option>
+                <option value="Réunion">Réunion</option>
+                <option value="Autre">Autre</option>
+              </select>
+            </label>
+            <label>Ligne
+              <select id="plannedStopLine">
+                <option value="ALL">Toutes les lignes</option>
+              </select>
+            </label>
+            <label>Jour
+              <select id="plannedStopDay">
+                <option value="ALL">Tous les jours</option>
+                <option value="0">Lundi</option>
+                <option value="1">Mardi</option>
+                <option value="2">Mercredi</option>
+                <option value="3">Jeudi</option>
+                <option value="4">Vendredi</option>
+                <option value="5">Samedi</option>
+              </select>
+            </label>
+            <label>Heure début
+              <input type="time" id="plannedStopStart" value="12:00" />
+            </label>
+            <label>Durée (minutes)
+              <input type="number" id="plannedStopDuration" value="30" min="5" />
+            </label>
+            <label>Commentaire
+              <input type="text" id="plannedStopComment" placeholder="Optionnel" />
+            </label>
+          </div>
+          <div class="buttons-row">
+            <button class="secondary-btn" id="plannedStopAddBtn">➕ Ajouter l'arrêt</button>
+          </div>
+          <div id="plannedStopsList" class="planned-stops-list">
+            <p class="helper-text">Aucun arrêt planifié.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>🏭 Créer un Ordre de Fabrication (OF)</h3>
+          <div id="planningOFNoArticles" class="helper-text warning-text">
+            ⚠️ Aucun article enregistré. Créez d'abord des articles dans l'onglet "Articles".
+          </div>
+          
+          <div id="planningOFForm" class="planning-of-form">
+            <div class="form-grid">
+              <label>Article *
+                <select id="planningOFArticle">
+                  <option value="">-- Sélectionner un article --</option>
+                </select>
+              </label>
+              <label>Ligne
+                <select id="planningOFLine" disabled></select>
+              </label>
+              <label>Quantité (colis) *
+                <input type="number" id="planningOFQty" min="1" placeholder="Ex: 1000" />
+              </label>
+              <label>Cadence (colis/h)
+                <input type="number" id="planningOFCadence" step="1" min="1" readonly />
+              </label>
+              <label>Jour de début *
+                <select id="planningOFDay">
+                  <option value="0">Lundi</option>
+                  <option value="1">Mardi</option>
+                  <option value="2">Mercredi</option>
+                  <option value="3">Jeudi</option>
+                  <option value="4">Vendredi</option>
+                  <option value="5">Samedi</option>
+                </select>
+              </label>
+              <label>Heure de début *
+                <input type="time" id="planningOFStart" value="06:00" />
+              </label>
+            </div>
+            
+            <div class="planning-of-preview">
+              <div class="of-preview-item">
+                <span class="of-preview-label">Durée estimée:</span>
+                <span class="of-preview-value" id="planningOFDuration">--</span>
+              </div>
+              <div class="of-preview-item">
+                <span class="of-preview-label">Fin prévue:</span>
+                <span class="of-preview-value" id="planningOFEnd">--</span>
+              </div>
+              <div class="of-preview-item">
+                <span class="of-preview-label">Prochain créneau dispo:</span>
+                <span class="of-preview-value" id="planningOFNextSlot">--</span>
+              </div>
+            </div>
+
+            <div class="buttons-row">
+              <button class="primary-btn" id="planningOFAddBtn">➕ Ajouter l'OF</button>
+              <button class="secondary-btn" id="planningOFSuggestBtn">💡 Placer automatiquement</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>📋 OFs du planning en cours</h3>
+          <div id="planningOFList" class="planning-of-list">
+            <p class="helper-text">Aucun OF ajouté. Créez des OFs ci-dessus.</p>
+          </div>
+          
+          <div class="buttons-row planning-validate-row">
+            <button class="secondary-btn" id="planningClearAllOFBtn">🗑️ Supprimer tous les OFs</button>
+            <button class="primary-btn" id="planningValidateBtn">✅ Valider le planning</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>👁️ Prévisualisation Gantt</h3>
+          <div id="planningPreviewGantt" class="gantt-container">
+            <div class="gantt-empty">Ajoutez des OFs pour voir la prévisualisation</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: PLANNING ACTIF -->
+      <div id="planning-tab-run" class="planning-pane hidden">
+        <div class="card">
+          <h3>📊 Sélection du Planning</h3>
+          <div class="planning-select-row">
+            <label>Planning validé
+              <select id="planningSelectWeek">
+                <option value="">-- Sélectionner un planning --</option>
+              </select>
+            </label>
+            <button class="primary-btn" id="planningLaunchBtn">🚀 Charger</button>
+          </div>
+          <div id="planningActiveInfo" class="planning-active-info hidden">
+            <span class="planning-active-badge">Planning actif: Semaine <span id="planningActiveWeek">--</span></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>📈 Diagramme de Gantt</h3>
+          <div class="planning-legend">
+            <span class="legend-item"><span class="legend-dot planned"></span>Planifié</span>
+            <span class="legend-item"><span class="legend-dot running"></span>En cours</span>
+            <span class="legend-item"><span class="legend-dot done"></span>Terminé</span>
+            <span class="legend-item"><span class="legend-dot late"></span>En retard</span>
+            <span class="legend-item"><span class="legend-dot stop"></span>Arrêt</span>
+          </div>
+          <div id="planningGantt" class="gantt-container">
+            <div class="gantt-empty">Sélectionnez un planning pour l'afficher</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>⏱️ Avance / Retard par ligne</h3>
+          <button class="secondary-btn" id="planningRefreshBtn" style="margin-bottom: 12px;">🔄 Rafraîchir depuis Production/Arrêts</button>
+          <div id="planningDelaysContainer" class="planning-delays-container">
+            <p class="helper-text">Chargez un planning pour voir l'avance/retard.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>📝 Liste des OFs</h3>
+          <div id="planningActiveOFList" class="planning-of-list">
+            <p class="helper-text">Aucun planning chargé.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL: Édition OF -->
+      <div id="planningOFEditModal" class="modal hidden">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>✏️ Modifier l'OF</h3>
+            <button class="icon-btn" id="planningOFEditClose">✖</button>
+          </div>
+          <div class="form-grid">
+            <label>Quantité (colis)
+              <input type="number" id="planningEditOFQty" min="1" />
+            </label>
+            <label>Jour
+              <select id="planningEditOFDay">
+                <option value="0">Lundi</option>
+                <option value="1">Mardi</option>
+                <option value="2">Mercredi</option>
+                <option value="3">Jeudi</option>
+                <option value="4">Vendredi</option>
+                <option value="5">Samedi</option>
+              </select>
+            </label>
+            <label>Heure début
+              <input type="time" id="planningEditOFStart" />
+            </label>
+            <label>Statut
+              <select id="planningEditOFStatus">
+                <option value="planned">Planifié</option>
+                <option value="running">En cours</option>
+                <option value="done">Terminé</option>
+                <option value="blocked">Bloqué</option>
+              </select>
+            </label>
+          </div>
+          <div class="buttons-row">
+            <button class="danger-btn" id="planningEditOFDelete">🗑️ Supprimer</button>
+            <button class="primary-btn" id="planningEditOFSave">💾 Enregistrer</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- PANNEAU PARAMÈTRES -->
+    <div id="settingsPanel" class="settings-panel hidden">
+      <div class="settings-panel__header">
+        <h3>Paramètres</h3>
+        <button id="settingsClose" class="icon-btn" aria-label="Fermer">✕</button>
+      </div>
+      <p class="helper-text">Mot de passe local, thème et options rapides. Rien n'est envoyé en ligne.</p>
+
+      <div class="settings-grid">
+        <div class="card compact">
+          <h4>Accès Manager</h4>
+          <form id="settingsCreatePasswordForm" class="manager-security-form">
+            <label for="settingsCreatePassword">Créer le mot de passe</label>
+            <input type="password" id="settingsCreatePassword" placeholder="Mot de passe" />
+            <input type="password" id="settingsCreatePasswordConfirm" placeholder="Confirmation" />
+            <button type="submit" class="secondary-btn">💾 Enregistrer</button>
+          </form>
+
+          <form id="settingsChangePasswordForm" class="manager-security-form">
+            <label for="settingsOldPassword">Modifier le mot de passe</label>
+            <input type="password" id="settingsOldPassword" placeholder="Ancien mot de passe" />
+            <input type="password" id="settingsNewPassword" placeholder="Nouveau mot de passe" />
+            <input type="password" id="settingsNewPasswordConfirm" placeholder="Confirmer le nouveau" />
+            <button type="submit" class="secondary-btn">🔐 Mettre à jour</button>
+          </form>
+
+          <div id="settingsSecurityStatus" class="import-status helper-text"></div>
+        </div>
+
+        <div class="card compact">
+          <h4>Dossier des fichiers Excel</h4>
+          <p class="helper-text">Imports, exports et historique utilisent ce dossier (ex : honor200 ➜ Documents).</p>
+          <div class="settings-folder-row">
+            <div>
+              <p id="settingsFolderPath" class="helper-text folder-path">Dossier actuel : Documents</p>
+              <div id="settingsFolderStatus" class="import-status helper-text"></div>
+            </div>
+            <button id="settingsFolderBtn" class="secondary-btn" type="button">📁 Choisir le dossier</button>
+          </div>
+        </div>
+
+        <div class="card compact">
+          <h4>Affichage</h4>
+          <div class="settings-toggle-row">
+            <span>Thème clair / sombre</span>
+            <button id="settingsThemeBtn" class="secondary-btn" type="button">Basculer</button>
+          </div>
+          <div class="settings-toggle-row">
+            <span>Réduire le bandeau</span>
+            <label class="switch">
+              <input type="checkbox" id="headerCompactToggle" checked />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="managerUnlockModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="managerUnlockTitle">
+      <div class="modal__content">
+        <div class="modal__header">
+          <h3 id="managerUnlockTitle">Accès Manager</h3>
+          <button id="managerUnlockClose" class="icon-btn" aria-label="Fermer">✕</button>
+        </div>
+        <p class="helper-text">Saisis le mot de passe pour afficher la page Manager (par défaut : 3005 tant qu'il n'est pas changé).</p>
+        <form id="managerUnlockForm" class="manager-security-form">
+          <input type="password" id="managerUnlockInput" placeholder="Mot de passe" autocomplete="current-password" />
+          <div class="modal__actions">
+            <button type="submit" class="primary-btn">Valider</button>
+            <button type="button" id="managerUnlockCancel" class="secondary-btn">Annuler</button>
+          </div>
+        </form>
+        <div id="managerUnlockStatus" class="import-status helper-text"></div>
+      </div>
+    </div>
+
+    <!-- CALCULATRICE FLOTTANTE -->
+    <div id="calculator" class="calculator hidden">
+      <div class="calc-header">
+        <span>Calculatrice</span>
+        <button id="calcCloseBtn" class="calc-close-btn">✕</button>
+      </div>
+
+      <input type="text" id="calcDisplay" class="calc-display" readonly />
+
+      <div class="calc-grid">
+        <button class="calc-btn" data-value="7">7</button>
+        <button class="calc-btn" data-value="8">8</button>
+        <button class="calc-btn" data-value="9">9</button>
+        <button class="calc-btn op" data-value="/">÷</button>
+
+        <button class="calc-btn" data-value="4">4</button>
+        <button class="calc-btn" data-value="5">5</button>
+        <button class="calc-btn" data-value="6">6</button>
+        <button class="calc-btn op" data-value="*">×</button>
+
+        <button class="calc-btn" data-value="1">1</button>
+        <button class="calc-btn" data-value="2">2</button>
+        <button class="calc-btn" data-value="3">3</button>
+        <button class="calc-btn op" data-value="-">−</button>
+
+        <button class="calc-btn" data-value="0">0</button>
+        <button class="calc-btn" data-value=".">.</button>
+        <button class="calc-btn" data-action="clear">C</button>
+        <button class="calc-btn op" data-value="+">+</button>
+
+        <button class="calc-btn equals" data-action="equals">=</button>
+      </div>
+    </div>
+
+    <button id="calcToggle" class="calculator-toggle">🧮</button>
+
+  </main>
+
+  <!-- SCRIPT PRINCIPAL -->
+  <script src="app.js"></script>
+  <!-- MODULE PLANNING v2 -->
+  <script src="planning.js"></script>
+</body>
+</html>
+
