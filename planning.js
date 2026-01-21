@@ -1352,7 +1352,6 @@ const PlanningModule = (function() {
   }
 
   function bindEvents() {
-    console.log('bindEvents() called');
     // Navigation onglets
     document.querySelectorAll('#section-planning .planning-tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
