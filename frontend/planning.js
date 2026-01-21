@@ -1390,6 +1390,7 @@ const PlanningModule = (function() {
         
         // Si pas d'arrêt pendant l'OF, affichage simple
         if (ofStops.length === 0) {
+          console.log('No stops - rendering simple block');
           const left = hoursToPixels(of.startHours);
           const width = Math.max(hoursToPixels(of.duration), 50);
           const endPos = positionToDayTime(of.startHours + of.duration);
@@ -1415,6 +1416,7 @@ const PlanningModule = (function() {
             </div>
           </div>`;
         } else {
+          console.log('Has stops - rendering segments');
           // L'OF est coupé par des arrêts - afficher les segments
           let currentStart = of.startHours;
           const sortedStops = ofStops.sort((a, b) => a.startHours - b.startHours);
@@ -1433,12 +1435,14 @@ const PlanningModule = (function() {
             const stopStart = stop.startHours;
             const stopEnd = stopStart + stop.duration;
             const ofNominalEnd = of.startHours + of.duration + totalPause;
+            console.log(`Segment loop: currentStart=${currentStart}, stopStart=${stopStart}, stopEnd=${stopEnd}, ofNominalEnd=${ofNominalEnd}`);
             
             // Segment avant l'arrêt
             if (currentStart < stopStart && currentStart < ofNominalEnd) {
               const segmentEnd = Math.min(stopStart, ofNominalEnd);
               const left = hoursToPixels(currentStart);
               const width = Math.max(hoursToPixels(segmentEnd - currentStart), 20);
+              console.log(`Creating segment 1: left=${left}, width=${width}`);
               
               html += `<div class="gantt-of-block segment ${statusClass}" 
                 style="left:${left}px;width:${width}px"
@@ -1459,10 +1463,12 @@ const PlanningModule = (function() {
           
           // Segment final après le dernier arrêt
           const finalEnd = of.startHours + of.duration + totalPause;
+          console.log(`Final segment: currentStart=${currentStart}, finalEnd=${finalEnd}`);
           if (currentStart < finalEnd) {
             const left = hoursToPixels(currentStart);
             const width = Math.max(hoursToPixels(finalEnd - currentStart), 20);
             const endPos = positionToDayTime(finalEnd);
+            console.log(`Creating final segment: left=${left}, width=${width}`);
             
             html += `<div class="gantt-of-block segment-end ${statusClass}" 
               style="left:${left}px;width:${width}px"
