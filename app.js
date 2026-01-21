@@ -85,6 +85,9 @@ let state = {
   },
 };
 
+// Expose state globally for planning.js integration
+window.state = state;
+
 const PLANNING_DAY_LABELS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
 
 // Références pour page Arrêts
