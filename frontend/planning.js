@@ -101,25 +101,16 @@ const PlanningModule = (function() {
 
   // Met à jour la date du lundi quand le numéro de semaine change
   function onWeekNumberChange() {
-    console.log('onWeekNumberChange appelé');
     const weekNumInput = document.getElementById('planningWeekNumber');
     const weekStartInput = document.getElementById('planningWeekStart');
     
-    if (!weekNumInput || !weekStartInput) {
-      console.log('Inputs non trouvés');
-      return;
-    }
+    if (!weekNumInput || !weekStartInput) return;
     
     const weekNum = parseInt(weekNumInput.value);
-    console.log('Numéro de semaine:', weekNum);
-    if (isNaN(weekNum) || weekNum < 1 || weekNum > 53) {
-      console.log('Numéro de semaine invalide');
-      return;
-    }
+    if (isNaN(weekNum) || weekNum < 1 || weekNum > 53) return;
     
     const monday = getMondayOfWeek(weekNum);
     const isoDate = formatDateISO(monday);
-    console.log('Nouveau lundi calculé:', isoDate);
     
     weekStartInput.value = isoDate;
     planningState.weekNumber = weekNum;
@@ -1361,7 +1352,6 @@ const PlanningModule = (function() {
   }
 
   function bindEvents() {
-    console.log('bindEvents() called');
     // Navigation onglets
     document.querySelectorAll('#section-planning .planning-tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1387,7 +1377,6 @@ const PlanningModule = (function() {
 
     // Semaine - mise à jour automatique du lundi quand le numéro de semaine change
     const weekNumEl = document.getElementById('planningWeekNumber');
-    console.log('Binding planningWeekNumber:', weekNumEl ? 'FOUND' : 'NOT FOUND');
     if (weekNumEl) {
       weekNumEl.addEventListener('change', onWeekNumberChange);
       weekNumEl.addEventListener('input', onWeekNumberChange);
