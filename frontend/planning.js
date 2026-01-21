@@ -16,6 +16,7 @@ const PlanningModule = (function() {
     articles: [],
     currentOFs: [],
     plannedStops: [], // Arrêts planifiés (pauses, maintenance, etc.)
+    changeovers: [], // Changements (intermédiaire, format, produit, couleur)
     savedPlannings: [],
     activePlanning: null,
     weekNumber: null,
@@ -23,6 +24,14 @@ const PlanningModule = (function() {
     editingOFId: null,
     dragData: null
   };
+
+  // Types de changements disponibles
+  const CHANGEOVER_TYPES = [
+    { id: 'intermediate', label: 'Intermédiaire', duration: 15, color: '#9b59b6' },
+    { id: 'format', label: 'Format', duration: 30, color: '#3498db' },
+    { id: 'product', label: 'Produit', duration: 45, color: '#e67e22' },
+    { id: 'color', label: 'Couleur', duration: 60, color: '#1abc9c' }
+  ];
 
   let nowMarkerInterval = null;
 
@@ -287,6 +296,7 @@ const PlanningModule = (function() {
           lines.forEach(line => {
             result.push({
               id: `${stop.id}_${dayIdx}_${line}`,
+              originalId: stop.id,
               type: 'stop',
               stopType: stop.type,
               line,
@@ -301,6 +311,181 @@ const PlanningModule = (function() {
     }
     
     return result;
+  }
+
+  // ==========================================
+  // CHANGEMENTS (CHANGEOVERS)
+  // ==========================================
+
+  function renderChangeoversList() {
+    const container = document.getElementById('changeoversList');
+    if (!container) return;
+
+    const changeovers = planningState.changeovers || [];
+    
+    if (changeovers.length === 0) {
+      container.innerHTML = '<p class="helper-text">Aucun changement planifié.</p>';
+      return;
+    }
+
+    container.innerHTML = changeovers.map(co => {
+      const typeInfo = CHANGEOVER_TYPES.find(t => t.id === co.type) || CHANGEOVER_TYPES[0];
+      return `
+        <div class="changeover-card" data-id="${co.id}" style="border-left: 4px solid ${typeInfo.color}">
+          <div class="changeover-card-info">
+            <div class="changeover-card-type">${typeInfo.label}</div>
+            <div class="changeover-card-details">
+              ${co.line} • ${DAYS[co.day]} ${co.startTime} • ${co.duration} min
+            </div>
+            ${co.comment ? `<div class="changeover-card-comment">${co.comment}</div>` : ''}
+          </div>
+          <button class="danger-btn btn-delete-changeover" data-id="${co.id}">🗑️</button>
+        </div>
+      `;
+    }).join('');
+
+    container.querySelectorAll('.btn-delete-changeover').forEach(btn => {
+      btn.addEventListener('click', () => deleteChangeover(btn.dataset.id));
+    });
+  }
+
+  function addChangeover() {
+    const type = document.getElementById('changeoverType')?.value || 'intermediate';
+    const line = document.getElementById('changeoverLine')?.value || '';
+    const day = parseInt(document.getElementById('changeoverDay')?.value) || 0;
+    const startTime = document.getElementById('changeoverStart')?.value || '06:00';
+    const duration = parseInt(document.getElementById('changeoverDuration')?.value) || 15;
+    const comment = document.getElementById('changeoverComment')?.value?.trim() || '';
+
+    if (!line) {
+      alert('Sélectionnez une ligne.');
+      return;
+    }
+
+    const [h, m] = startTime.split(':').map(Number);
+    const startHours = day * 24 + h + m / 60;
+    const durationHours = duration / 60;
+
+    const changeover = {
+      id: generateId(),
+      type,
+      line,
+      day,
+      startTime,
+      startHours,
+      duration,
+      durationHours,
+      comment
+    };
+
+    if (!planningState.changeovers) planningState.changeovers = [];
+    planningState.changeovers.push(changeover);
+    savePlanningState();
+    
+    renderChangeoversList();
+    renderPreviewGantt();
+    
+    // Reset form
+    document.getElementById('changeoverComment').value = '';
+  }
+
+  function deleteChangeover(id) {
+    planningState.changeovers = (planningState.changeovers || []).filter(c => c.id !== id);
+    savePlanningState();
+    renderChangeoversList();
+    renderPreviewGantt();
+  }
+
+  function getChangeoversForGantt() {
+    return (planningState.changeovers || []).map(co => {
+      const typeInfo = CHANGEOVER_TYPES.find(t => t.id === co.type) || CHANGEOVER_TYPES[0];
+      return {
+        id: co.id,
+        type: 'changeover',
+        changeoverType: co.type,
+        line: co.line,
+        startHours: co.startHours,
+        duration: co.durationHours,
+        label: typeInfo.label,
+        color: typeInfo.color,
+        comment: co.comment
+      };
+    });
+  }
+
+  // ==========================================
+  // CALCUL DES OFs AVEC ARRÊTS (SPLIT & EXTEND)
+  // ==========================================
+
+  // Calcule les segments d'un OF en tenant compte des arrêts qui le coupent
+  function calculateOFSegments(of, stops, changeovers) {
+    const segments = [];
+    let currentStart = of.startHours;
+    const ofEnd = of.startHours + of.duration;
+    let totalPause = 0;
+
+    // Trier tous les événements qui peuvent couper l'OF
+    const interruptions = [
+      ...stops.filter(s => s.line === of.line),
+      ...changeovers.filter(c => c.line === of.line)
+    ].sort((a, b) => a.startHours - b.startHours);
+
+    // Parcourir les interruptions
+    for (const interrupt of interruptions) {
+      const intStart = interrupt.startHours;
+      const intEnd = intStart + interrupt.duration;
+
+      // L'interruption commence après la fin de l'OF actuel (avec pauses accumulées)
+      if (intStart >= ofEnd + totalPause) continue;
+
+      // L'interruption finit avant le début de l'OF
+      if (intEnd <= currentStart) continue;
+
+      // L'interruption chevauche l'OF
+      if (intStart > currentStart && intStart < ofEnd + totalPause) {
+        // Ajouter un segment d'OF avant l'interruption
+        segments.push({
+          type: 'of',
+          startHours: currentStart,
+          endHours: intStart,
+          duration: intStart - currentStart
+        });
+      }
+
+      // Ajouter l'interruption comme segment
+      segments.push({
+        type: interrupt.type,
+        startHours: intStart,
+        endHours: intEnd,
+        duration: interrupt.duration,
+        label: interrupt.label,
+        color: interrupt.color || (interrupt.type === 'stop' ? '#e74c3c' : '#9b59b6')
+      });
+
+      // Mettre à jour le point de départ et la pause accumulée
+      if (intStart < ofEnd + totalPause) {
+        totalPause += interrupt.duration;
+        currentStart = intEnd;
+      }
+    }
+
+    // Ajouter le segment final de l'OF
+    const finalEnd = ofEnd + totalPause;
+    if (currentStart < finalEnd) {
+      segments.push({
+        type: 'of',
+        startHours: currentStart,
+        endHours: finalEnd,
+        duration: finalEnd - currentStart
+      });
+    }
+
+    return {
+      segments,
+      totalDuration: of.duration,
+      effectiveEnd: ofEnd + totalPause,
+      totalPause
+    };
   }
 
   // ==========================================
@@ -838,82 +1023,214 @@ const PlanningModule = (function() {
   }
 
   // ==========================================
-  // DRAG AND DROP
+  // DRAG AND DROP - VERSION AMÉLIORÉE
   // ==========================================
 
   function initDragDrop(container, isActive) {
+    // Drag pour les blocs OF
     container.querySelectorAll('.gantt-of-block[data-draggable="true"]').forEach(block => {
       block.addEventListener('mousedown', (e) => {
-        if (e.button !== 0) return; // Left click only
-        
-        const ofId = block.dataset.ofId;
-        const rect = block.getBoundingClientRect();
-        const containerRect = block.closest('.gantt-line-track').getBoundingClientRect();
-        
-        planningState.dragData = {
-          ofId,
-          startX: e.clientX,
-          originalLeft: block.offsetLeft,
-          block,
-          isActive,
-          containerWidth: containerRect.width
-        };
-        
-        block.classList.add('dragging');
-        document.addEventListener('mousemove', handleDragMove);
-        document.addEventListener('mouseup', handleDragEnd);
-        e.preventDefault();
+        if (e.button !== 0) return;
+        startDrag(e, block, 'of', isActive);
       });
     });
+
+    // Drag pour les blocs arrêt
+    container.querySelectorAll('.gantt-stop-block[data-draggable="true"]').forEach(block => {
+      block.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        startDrag(e, block, 'stop', isActive);
+      });
+    });
+
+    // Drag pour les blocs changeover
+    container.querySelectorAll('.gantt-changeover-block[data-draggable="true"]').forEach(block => {
+      block.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        startDrag(e, block, 'changeover', isActive);
+      });
+    });
+  }
+
+  function startDrag(e, block, blockType, isActive) {
+    const track = block.closest('.gantt-line-track');
+    const containerRect = track.getBoundingClientRect();
+    const line = track.dataset.line;
+    
+    planningState.dragData = {
+      blockId: block.dataset.ofId || block.dataset.stopId || block.dataset.changeoverId,
+      blockType,
+      startX: e.clientX,
+      startY: e.clientY,
+      originalLeft: block.offsetLeft,
+      originalLine: line,
+      block,
+      isActive,
+      containerWidth: containerRect.width,
+      containerTop: containerRect.top
+    };
+    
+    block.classList.add('dragging');
+    document.addEventListener('mousemove', handleDragMove);
+    document.addEventListener('mouseup', handleDragEnd);
+    e.preventDefault();
   }
 
   function handleDragMove(e) {
     if (!planningState.dragData) return;
     
-    const { block, startX, originalLeft, containerWidth } = planningState.dragData;
+    const { block, startX, originalLeft, containerWidth, blockType } = planningState.dragData;
     const deltaX = e.clientX - startX;
     let newLeft = originalLeft + deltaX;
     
-    // Limiter au conteneur
+    // Limiter au conteneur horizontalement
     newLeft = Math.max(0, Math.min(newLeft, containerWidth - block.offsetWidth));
-    
     block.style.left = newLeft + 'px';
+
+    // Pour les arrêts, permettre le changement de ligne (feedback visuel)
+    if (blockType === 'stop') {
+      // Trouver la ligne survolée
+      const ganttContainer = block.closest('.gantt-wrapper-v4');
+      if (ganttContainer) {
+        const rows = ganttContainer.querySelectorAll('.gantt-row-v4');
+        rows.forEach(row => {
+          const rect = row.getBoundingClientRect();
+          if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+            row.classList.add('drag-over');
+          } else {
+            row.classList.remove('drag-over');
+          }
+        });
+      }
+    }
   }
 
   function handleDragEnd(e) {
     if (!planningState.dragData) return;
     
-    const { ofId, block, isActive, containerWidth } = planningState.dragData;
+    const { blockId, blockType, block, isActive, originalLine } = planningState.dragData;
     
     document.removeEventListener('mousemove', handleDragMove);
     document.removeEventListener('mouseup', handleDragEnd);
     
     block.classList.remove('dragging');
     
+    // Nettoyer les indicateurs de survol
+    document.querySelectorAll('.gantt-row-v4.drag-over').forEach(row => {
+      row.classList.remove('drag-over');
+    });
+    
     // Calculer la nouvelle position en heures
     const newLeft = parseInt(block.style.left) || 0;
     const newStartHours = pixelsToHours(newLeft);
-    
-    // Arrondir à 15 minutes (0.25h)
-    const roundedHours = Math.round(newStartHours * 4) / 4;
-    
-    // Trouver et mettre à jour l'OF
-    let of = isActive 
-      ? planningState.activePlanning?.ofs.find(o => o.id === ofId)
-      : planningState.currentOFs.find(o => o.id === ofId);
-    
-    if (of && roundedHours >= 0 && roundedHours + of.duration <= TOTAL_HOURS) {
-      of.startHours = roundedHours;
-      const dayTime = positionToDayTime(roundedHours);
-      of.day = dayTime.day;
-      of.startTime = dayTime.time;
-      
-      savePlanningState();
+    const roundedHours = Math.round(newStartHours * 4) / 4; // Arrondir à 15 min
+
+    // Trouver la ligne cible (pour les arrêts qui peuvent changer de ligne)
+    let targetLine = originalLine;
+    if (blockType === 'stop') {
+      const ganttContainer = block.closest('.gantt-wrapper-v4');
+      if (ganttContainer) {
+        const rows = ganttContainer.querySelectorAll('.gantt-row-v4');
+        rows.forEach(row => {
+          const rect = row.getBoundingClientRect();
+          if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+            const track = row.querySelector('.gantt-line-track');
+            if (track) targetLine = track.dataset.line;
+          }
+        });
+      }
+    }
+
+    // Appliquer les règles selon le type de bloc
+    if (blockType === 'of') {
+      handleOFDrop(blockId, roundedHours, isActive);
+    } else if (blockType === 'stop') {
+      handleStopDrop(blockId, roundedHours, targetLine, isActive);
+    } else if (blockType === 'changeover') {
+      handleChangeoverDrop(blockId, roundedHours, isActive);
     }
     
     planningState.dragData = null;
+  }
+
+  // Gestion du drop d'un OF : reste sur sa ligne, décale les autres OFs
+  function handleOFDrop(ofId, newStartHours, isActive) {
+    const ofs = isActive ? planningState.activePlanning?.ofs : planningState.currentOFs;
+    if (!ofs) return;
+
+    const of = ofs.find(o => o.id === ofId);
+    if (!of) return;
+
+    // Vérifier les limites
+    if (newStartHours < 0 || newStartHours + of.duration > TOTAL_HOURS) {
+      refreshGantt(isActive);
+      return;
+    }
+
+    const oldStart = of.startHours;
+    of.startHours = newStartHours;
     
-    // Rafraîchir
+    const dayTime = positionToDayTime(newStartHours);
+    of.day = dayTime.day;
+    of.startTime = dayTime.time;
+
+    // Vérifier les collisions avec d'autres OFs sur la même ligne et les décaler
+    const lineOFs = ofs.filter(o => o.line === of.line && o.id !== ofId)
+                       .sort((a, b) => a.startHours - b.startHours);
+
+    const ofEnd = newStartHours + of.duration;
+    
+    for (const otherOF of lineOFs) {
+      const otherEnd = otherOF.startHours + otherOF.duration;
+      
+      // Si collision
+      if (newStartHours < otherEnd && ofEnd > otherOF.startHours) {
+        // Décaler l'autre OF à la fin de celui-ci
+        otherOF.startHours = ofEnd;
+        const newDayTime = positionToDayTime(otherOF.startHours);
+        otherOF.day = newDayTime.day;
+        otherOF.startTime = newDayTime.time;
+      }
+    }
+
+    savePlanningState();
+    refreshGantt(isActive);
+  }
+
+  // Gestion du drop d'un arrêt : peut aller partout, coupe les OFs
+  function handleStopDrop(stopId, newStartHours, targetLine, isActive) {
+    // Pour les arrêts planifiés, on ne modifie pas directement
+    // On crée une copie locale ou on notifie l'utilisateur
+    // Pour l'instant, on recharge juste le Gantt
+    
+    // TODO: Implémenter le déplacement des arrêts si nécessaire
+    refreshGantt(isActive);
+  }
+
+  // Gestion du drop d'un changeover
+  function handleChangeoverDrop(changeoverId, newStartHours, isActive) {
+    const changeover = (planningState.changeovers || []).find(c => c.id === changeoverId);
+    if (!changeover) {
+      refreshGantt(isActive);
+      return;
+    }
+
+    // Vérifier les limites
+    if (newStartHours < 0 || newStartHours + changeover.durationHours > TOTAL_HOURS) {
+      refreshGantt(isActive);
+      return;
+    }
+
+    changeover.startHours = newStartHours;
+    const dayTime = positionToDayTime(newStartHours);
+    changeover.day = dayTime.day;
+    changeover.startTime = dayTime.time;
+
+    savePlanningState();
+    refreshGantt(isActive);
+  }
+
+  function refreshGantt(isActive) {
     if (isActive) {
       renderActiveGantt();
       renderActiveOFList();
@@ -1021,7 +1338,10 @@ const PlanningModule = (function() {
       lineStops.filter(s => s.type === 'stop').forEach(stop => {
         const left = hoursToPixels(stop.startHours);
         const width = Math.max(hoursToPixels(stop.duration), 30);
-        html += `<div class="gantt-stop-block planned" style="left:${left}px;width:${width}px">
+        html += `<div class="gantt-stop-block planned" 
+          style="left:${left}px;width:${width}px"
+          data-stop-id="${stop.id}"
+          data-draggable="${interactive}">
           <span class="stop-icon">⏸️</span>
           <span class="stop-label">${stop.label}</span>
         </div>`;
@@ -1031,39 +1351,123 @@ const PlanningModule = (function() {
       lineStops.filter(s => s.type === 'unplanned').forEach(stop => {
         const left = hoursToPixels(stop.startHours);
         const width = Math.max(hoursToPixels(stop.duration), 30);
-        html += `<div class="gantt-stop-block unplanned" style="left:${left}px;width:${width}px">
+        html += `<div class="gantt-stop-block unplanned" 
+          style="left:${left}px;width:${width}px"
+          data-stop-id="${stop.id}">
           <span class="stop-icon">🛑</span>
           <span class="stop-label">${stop.label}</span>
         </div>`;
       });
+
+      // Changeovers (changements)
+      const lineChangeovers = getChangeoversForGantt().filter(c => c.line === line);
+      lineChangeovers.forEach(co => {
+        const left = hoursToPixels(co.startHours);
+        const width = Math.max(hoursToPixels(co.duration), 30);
+        html += `<div class="gantt-changeover-block" 
+          style="left:${left}px;width:${width}px;background-color:${co.color}"
+          data-changeover-id="${co.id}"
+          data-draggable="${interactive}">
+          <span class="changeover-label">${co.label}</span>
+        </div>`;
+      });
       
-      // OFs
+      // OFs avec calcul des segments (coupés par arrêts)
       lineOFs.forEach(of => {
-        const left = hoursToPixels(of.startHours);
-        const width = Math.max(hoursToPixels(of.duration), 50);
-        const endPos = positionToDayTime(of.startHours + of.duration);
-        const progress = of.quantity > 0 ? Math.min(100, (of.produced || 0) / of.quantity * 100) : 0;
+        const ofStops = lineStops.filter(s => {
+          const stopEnd = s.startHours + s.duration;
+          const ofEnd = of.startHours + of.duration;
+          // Le stop chevauche l'OF
+          return s.startHours < ofEnd && stopEnd > of.startHours;
+        });
         
-        // Statut visuel
-        let statusClass = of.status;
-        if (interactive) {
-          const nowHours = getCurrentHoursInWeek();
-          if (nowHours !== null && of.status !== 'done' && of.startHours + of.duration < nowHours && progress < 100) {
-            statusClass = 'late';
+        // Si pas d'arrêt pendant l'OF, affichage simple
+        if (ofStops.length === 0) {
+          const left = hoursToPixels(of.startHours);
+          const width = Math.max(hoursToPixels(of.duration), 50);
+          const endPos = positionToDayTime(of.startHours + of.duration);
+          const progress = of.quantity > 0 ? Math.min(100, (of.produced || 0) / of.quantity * 100) : 0;
+          
+          let statusClass = of.status || 'planned';
+          if (interactive) {
+            const nowHours = getCurrentHoursInWeek();
+            if (nowHours !== null && of.status !== 'done' && of.startHours + of.duration < nowHours && progress < 100) {
+              statusClass = 'late';
+            }
+          }
+          
+          html += `<div class="gantt-of-block ${statusClass}" 
+            style="left:${left}px;width:${width}px"
+            data-of-id="${of.id}"
+            data-draggable="${interactive}">
+            ${progress > 0 ? `<div class="gantt-progress-bar" style="width:${progress}%"></div>` : ''}
+            <div class="gantt-of-content">
+              <div class="gantt-of-code">${of.articleCode}</div>
+              <div class="gantt-of-qty">${of.quantity} colis</div>
+              <div class="gantt-of-time">${of.startTime}→${endPos.time}</div>
+            </div>
+          </div>`;
+        } else {
+          // L'OF est coupé par des arrêts - afficher les segments
+          let currentStart = of.startHours;
+          const sortedStops = ofStops.sort((a, b) => a.startHours - b.startHours);
+          let totalPause = 0;
+          const progress = of.quantity > 0 ? Math.min(100, (of.produced || 0) / of.quantity * 100) : 0;
+          
+          let statusClass = of.status || 'planned';
+          if (interactive) {
+            const nowHours = getCurrentHoursInWeek();
+            if (nowHours !== null && of.status !== 'done' && of.startHours + of.duration + totalPause < nowHours && progress < 100) {
+              statusClass = 'late';
+            }
+          }
+          
+          for (const stop of sortedStops) {
+            const stopStart = stop.startHours;
+            const stopEnd = stopStart + stop.duration;
+            const ofNominalEnd = of.startHours + of.duration + totalPause;
+            
+            // Segment avant l'arrêt
+            if (currentStart < stopStart && currentStart < ofNominalEnd) {
+              const segmentEnd = Math.min(stopStart, ofNominalEnd);
+              const left = hoursToPixels(currentStart);
+              const width = Math.max(hoursToPixels(segmentEnd - currentStart), 20);
+              
+              html += `<div class="gantt-of-block segment ${statusClass}" 
+                style="left:${left}px;width:${width}px"
+                data-of-id="${of.id}"
+                data-draggable="${interactive}">
+                <div class="gantt-of-content">
+                  <div class="gantt-of-code">${of.articleCode}</div>
+                </div>
+              </div>`;
+            }
+            
+            // L'arrêt repousse la fin
+            if (stopStart < ofNominalEnd) {
+              totalPause += stop.duration;
+            }
+            currentStart = stopEnd;
+          }
+          
+          // Segment final après le dernier arrêt
+          const finalEnd = of.startHours + of.duration + totalPause;
+          if (currentStart < finalEnd) {
+            const left = hoursToPixels(currentStart);
+            const width = Math.max(hoursToPixels(finalEnd - currentStart), 20);
+            const endPos = positionToDayTime(finalEnd);
+            
+            html += `<div class="gantt-of-block segment-end ${statusClass}" 
+              style="left:${left}px;width:${width}px"
+              data-of-id="${of.id}"
+              data-draggable="${interactive}">
+              <div class="gantt-of-content">
+                <div class="gantt-of-qty">${of.quantity}</div>
+                <div class="gantt-of-time">→${endPos.time}</div>
+              </div>
+            </div>`;
           }
         }
-        
-        html += `<div class="gantt-of-block ${statusClass}" 
-          style="left:${left}px;width:${width}px"
-          data-of-id="${of.id}"
-          data-draggable="${interactive}">
-          ${progress > 0 ? `<div class="gantt-progress-bar" style="width:${progress}%"></div>` : ''}
-          <div class="gantt-of-content">
-            <div class="gantt-of-code">${of.articleCode}</div>
-            <div class="gantt-of-qty">${of.quantity} colis</div>
-            <div class="gantt-of-time">${of.startTime}→${endPos.time}</div>
-          </div>
-        </div>`;
       });
       
       html += '</div></div>';
@@ -1326,7 +1730,7 @@ const PlanningModule = (function() {
   function initLineSelects() {
     const lines = window.LINES || ['Râpé', 'T2', 'OMORI', 'T1', 'Emballage', 'Dés', 'Filets', 'Prédécoupé'];
     
-    ['planningArticleLine', 'planningOFLine', 'plannedStopLine'].forEach(id => {
+    ['planningArticleLine', 'planningOFLine', 'plannedStopLine', 'changeoverLine'].forEach(id => {
       const select = document.getElementById(id);
       if (select) {
         if (id === 'plannedStopLine') {
@@ -1402,6 +1806,9 @@ const PlanningModule = (function() {
     // Arrêts planifiés
     document.getElementById('plannedStopAddBtn')?.addEventListener('click', addPlannedStop);
 
+    // Changements (changeovers)
+    document.getElementById('changeoverAddBtn')?.addEventListener('click', addChangeover);
+
     // Validation
     document.getElementById('planningValidateBtn')?.addEventListener('click', validatePlanning);
 
@@ -1433,6 +1840,7 @@ const PlanningModule = (function() {
     renderArticlesList();
     updateOFFormVisibility();
     renderPlannedStopsList();
+    renderChangeoversList();
     renderOFList();
     renderPreviewGantt();
     updatePlanningSelect();
