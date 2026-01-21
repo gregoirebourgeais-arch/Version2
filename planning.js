@@ -1840,6 +1840,7 @@ const PlanningModule = (function() {
     renderArticlesList();
     updateOFFormVisibility();
     renderPlannedStopsList();
+    renderChangeoversList();
     renderOFList();
     renderPreviewGantt();
     updatePlanningSelect();
