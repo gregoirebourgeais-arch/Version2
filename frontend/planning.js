@@ -1374,12 +1374,19 @@ const PlanningModule = (function() {
       
       // OFs avec calcul des segments (coupés par arrêts)
       lineOFs.forEach(of => {
+        console.log(`OF ${of.articleCode}: startHours=${of.startHours}, duration=${of.duration}, line=${of.line}`);
+        console.log(`lineStops for ${line}:`, lineStops.map(s => ({start: s.startHours, dur: s.duration, type: s.type})));
+        
         const ofStops = lineStops.filter(s => {
           const stopEnd = s.startHours + s.duration;
           const ofEnd = of.startHours + of.duration;
           // Le stop chevauche l'OF
-          return s.startHours < ofEnd && stopEnd > of.startHours;
+          const overlaps = s.startHours < ofEnd && stopEnd > of.startHours;
+          console.log(`  Stop ${s.startHours}-${stopEnd} vs OF ${of.startHours}-${ofEnd}: overlaps=${overlaps}`);
+          return overlaps;
         });
+        
+        console.log(`ofStops count: ${ofStops.length}`);
         
         // Si pas d'arrêt pendant l'OF, affichage simple
         if (ofStops.length === 0) {
