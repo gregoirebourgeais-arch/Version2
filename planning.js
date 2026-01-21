@@ -75,10 +75,46 @@ const PlanningModule = (function() {
     return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
   }
 
+  // Calcule le lundi d'une semaine donnée (ISO 8601)
+  function getMondayOfWeek(weekNumber, year = new Date().getFullYear()) {
+    // Le 4 janvier est toujours dans la semaine 1 (ISO 8601)
+    const jan4 = new Date(year, 0, 4);
+    const jan4Day = jan4.getDay() || 7; // 1=Lundi, 7=Dimanche
+    
+    // Trouver le lundi de la semaine 1
+    const mondayWeek1 = new Date(jan4);
+    mondayWeek1.setDate(jan4.getDate() - jan4Day + 1);
+    
+    // Ajouter (weekNumber - 1) semaines
+    const targetMonday = new Date(mondayWeek1);
+    targetMonday.setDate(mondayWeek1.getDate() + (weekNumber - 1) * 7);
+    
+    return targetMonday;
+  }
+
   function setCurrentWeek() {
     const monday = getMonday(new Date());
     planningState.weekStart = formatDateISO(monday);
     planningState.weekNumber = getWeekNumber(monday);
+    savePlanningState();
+  }
+
+  // Met à jour la date du lundi quand le numéro de semaine change
+  function onWeekNumberChange() {
+    const weekNumInput = document.getElementById('planningWeekNumber');
+    const weekStartInput = document.getElementById('planningWeekStart');
+    
+    if (!weekNumInput || !weekStartInput) return;
+    
+    const weekNum = parseInt(weekNumInput.value);
+    if (isNaN(weekNum) || weekNum < 1 || weekNum > 53) return;
+    
+    const monday = getMondayOfWeek(weekNum);
+    const isoDate = formatDateISO(monday);
+    
+    weekStartInput.value = isoDate;
+    planningState.weekNumber = weekNum;
+    planningState.weekStart = isoDate;
     savePlanningState();
   }
 
