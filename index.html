@@ -813,6 +813,51 @@
         </div>
 
         <div class="card">
+          <h3>🔄 Changements (entre OFs)</h3>
+          <p class="helper-text">Définissez les temps de changement de format, produit, couleur, etc.</p>
+          <div class="form-grid">
+            <label>Type de changement
+              <select id="changeoverType">
+                <option value="intermediate">Intermédiaire (15 min)</option>
+                <option value="format">Format (30 min)</option>
+                <option value="product">Produit (45 min)</option>
+                <option value="color">Couleur (60 min)</option>
+              </select>
+            </label>
+            <label>Ligne *
+              <select id="changeoverLine">
+                <!-- Options ajoutées par JS -->
+              </select>
+            </label>
+            <label>Jour
+              <select id="changeoverDay">
+                <option value="0">Lundi</option>
+                <option value="1">Mardi</option>
+                <option value="2">Mercredi</option>
+                <option value="3">Jeudi</option>
+                <option value="4">Vendredi</option>
+                <option value="5">Samedi</option>
+              </select>
+            </label>
+            <label>Heure début
+              <input type="time" id="changeoverStart" value="06:00" />
+            </label>
+            <label>Durée (minutes)
+              <input type="number" id="changeoverDuration" value="15" min="5" />
+            </label>
+            <label>Commentaire
+              <input type="text" id="changeoverComment" placeholder="Optionnel" />
+            </label>
+          </div>
+          <div class="buttons-row">
+            <button class="secondary-btn" id="changeoverAddBtn">➕ Ajouter le changement</button>
+          </div>
+          <div id="changeoversList" class="changeovers-list">
+            <p class="helper-text">Aucun changement planifié.</p>
+          </div>
+        </div>
+
+        <div class="card">
           <h3>🏭 Créer un Ordre de Fabrication (OF)</h3>
           <div id="planningOFNoArticles" class="helper-text warning-text">
             ⚠️ Aucun article enregistré. Créez d'abord des articles dans l'onglet "Articles".
