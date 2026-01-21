@@ -1730,7 +1730,7 @@ const PlanningModule = (function() {
   function initLineSelects() {
     const lines = window.LINES || ['Râpé', 'T2', 'OMORI', 'T1', 'Emballage', 'Dés', 'Filets', 'Prédécoupé'];
     
-    ['planningArticleLine', 'planningOFLine', 'plannedStopLine'].forEach(id => {
+    ['planningArticleLine', 'planningOFLine', 'plannedStopLine', 'changeoverLine'].forEach(id => {
       const select = document.getElementById(id);
       if (select) {
         if (id === 'plannedStopLine') {
