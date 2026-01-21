@@ -1377,7 +1377,6 @@ const PlanningModule = (function() {
 
     // Semaine - mise à jour automatique du lundi quand le numéro de semaine change
     const weekNumEl = document.getElementById('planningWeekNumber');
-    console.log('Binding planningWeekNumber:', weekNumEl ? 'FOUND' : 'NOT FOUND');
     if (weekNumEl) {
       weekNumEl.addEventListener('change', onWeekNumberChange);
       weekNumEl.addEventListener('input', onWeekNumberChange);
